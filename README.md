@@ -13,23 +13,10 @@ The application is configured using environment variables:
 - `HOST`: Host to bind the server to (default: 0.0.0.0)
 
 ## Running with Docker 
-```
-bash
+```bash
 docker run -p 8000:8000 \
 -e BEACON_NODE_URL=http://your-beacon-node:5052 \
 -e VALIDATOR_INDEXES=123,456,789 \
--e DIVOOM_API_ENDPOINT=http://your-divoom-api:5000 \
-ghcr.io/your-username/beacon-chain-display:latest
-:
-bash
-Backend
-pip install -r requirements.txt
-playwright install
-Frontend
-cd ui && npm install
-:
-bash
-Frontend
-cd ui && npm run dev
-Backend
-python main.py
+-e DIVOOM_API_ENDPOINT=http://your-divoom-rest-api:5000 \
+ghcr.io/samcm/divoom-eth:latest
+```

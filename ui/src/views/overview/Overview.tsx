@@ -48,13 +48,16 @@ function Overview() {
   const [slotsData, setSlotsData] = useState<SlotsResponse | null>(null);
   const [arrivalTimes, setArrivalTimes] = useState<ArrivalTimesResponse | null>(null);
 
+  // Get the base URL from the current window location
+  const baseUrl = window.location.origin;
+
   useEffect(() => {
     const fetchData = async () => {
       try {
         const [statusResponse, slotsResponse, arrivalTimesResponse] = await Promise.all([
-          axios.get('http://localhost:8000/api/status'),
-          axios.get('http://localhost:8000/api/slots'),
-          axios.get('http://localhost:8000/api/arrival-times')
+          axios.get(`${baseUrl}/api/status`),
+          axios.get(`${baseUrl}/api/slots`),
+          axios.get(`${baseUrl}/api/arrival-times`)
         ]);
         
         setStatus(statusResponse.data);
@@ -68,7 +71,7 @@ function Overview() {
     fetchData();
     const interval = setInterval(fetchData, 5000);
     return () => clearInterval(interval);
-  }, []);
+  }, [baseUrl]);
 
   const getSlotColor = (status: SlotData['status']) => {
     switch (status) {

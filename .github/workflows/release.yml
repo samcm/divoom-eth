@@ -1,8 +1,11 @@
-name: Release
+name: Build and Push Docker Image
 
 on:
   release:
     types: [published]
+  push:
+    branches:
+      - master
 
 env:
   REGISTRY: ghcr.io
@@ -32,8 +35,12 @@ jobs:
         with:
           images: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}
           tags: |
-            type=semver,pattern={{version}}
-            type=semver,pattern={{major}}.{{minor}}
+            # For releases
+            type=semver,pattern={{version}},enable=${{ github.event_name == 'release' }}
+            type=semver,pattern={{major}}.{{minor}},enable=${{ github.event_name == 'release' }}
+            # For pushes to master
+            type=raw,value=master,enable=${{ github.event_name == 'push' }}
+            type=sha,prefix=,format=short,enable=${{ github.event_name == 'push' }}
 
       - name: Build and push Docker image
         uses: docker/build-push-action@v5
@@ -41,4 +48,4 @@ jobs:
           context: .
           push: true
           tags: ${{ steps.meta.outputs.tags }}
-          labels: ${{ steps.meta.outputs.labels }} 
+          labels: ${{ steps.meta.outputs.labels }}
