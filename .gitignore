@@ -2,3 +2,4 @@
 ui/dist
 node_modules
 __pycache__
+validator_mapping.parquet

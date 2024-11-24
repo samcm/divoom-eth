@@ -10,6 +10,17 @@ import uvicorn
 from dotenv import load_dotenv
 from playwright.async_api import async_playwright
 from typing import Dict
+from validator_gadget import ValidatorGadget
+import requests
+from tqdm import tqdm
+import logging
+from contextlib import asynccontextmanager
+
+logging.basicConfig(
+    level=logging.INFO,
+    format='%(asctime)s - %(levelname)s - %(message)s',
+    datefmt='%H:%M:%S'
+)
 
 load_dotenv()
 
@@ -31,7 +42,33 @@ if not VALIDATOR_INDEXES or VALIDATOR_INDEXES == ['']:
 if not DIVOOM_API_ENDPOINT:
     raise ValueError("DIVOOM_API_ENDPOINT environment variable is required")
 
-app = FastAPI()
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    # Download validator mapping if needed
+    download_validator_mapping()
+    
+    # Initialize validator gadget
+    global validator_gadget
+    validator_gadget = ValidatorGadget()
+    
+    # Initialize beacon client
+    await beacon_client.initialize()
+    
+    # Add event listeners
+    beacon_client.add_head_listener(handle_head_event)
+    beacon_client.add_slot_listener(handle_slot_change)
+    
+    # Start background tasks
+    asyncio.create_task(beacon_client.subscribe_to_head_events())
+    asyncio.create_task(beacon_client.start_slot_timer())
+    print("Started SSE subscription and slot timer")
+    
+    yield  # Server is running
+    
+    # Cleanup (if needed)
+    print("Shutting down...")
+
+app = FastAPI(lifespan=lifespan)
 
 # CORS configuration
 app.add_middleware(
@@ -42,8 +79,34 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-beacon_client = BeaconClient(BEACON_NODE_URL)
+beacon_client = BeaconClient(BEACON_NODE_URL, VALIDATOR_INDEXES)
 divoom_client = DivoomClient(DIVOOM_API_ENDPOINT)
+validator_gadget = ValidatorGadget()
+
+def download_validator_mapping():
+    """Downloads the validator mapping file if it doesn't exist"""
+    url = "https://storage.googleapis.com/public_eth_data/openethdata/validator_data.parquet.gzip"
+    file_path = "validator_mapping.parquet"
+    
+    if os.path.isfile(file_path):
+        return
+        
+    logging.info(f"Downloading validator mapping from {url}")
+    response = requests.get(url, stream=True)
+    total_size = int(response.headers.get('content-length', 0))
+    
+    with open(file_path, 'wb') as file, tqdm(
+        desc="Downloading validator mapping",
+        total=total_size,
+        unit='iB',
+        unit_scale=True,
+        unit_divisor=1024,
+    ) as progress_bar:
+        for data in response.iter_content(chunk_size=1024):
+            size = file.write(data)
+            progress_bar.update(size)
+            
+    logging.info("Validator mapping download complete")
 
 async def capture_react_page():
     async with async_playwright() as p:
@@ -98,17 +161,6 @@ async def handle_slot_change(slot_data: Dict):
     except Exception as e:
         print(f"Error updating display on slot change: {e}")
 
-@app.on_event("startup")
-async def startup_event():
-    await beacon_client.initialize()
-    # Add event listeners
-    beacon_client.add_head_listener(handle_head_event)
-    beacon_client.add_slot_listener(handle_slot_change)
-    # Start background tasks
-    asyncio.create_task(beacon_client.subscribe_to_head_events())
-    asyncio.create_task(beacon_client.start_slot_timer())
-    print("Started SSE subscription and slot timer")
-
 @app.get("/api/status")
 async def get_status():
     return await beacon_client.get_validator_status_summary(VALIDATOR_INDEXES)
@@ -136,6 +188,44 @@ async def get_image():
             status_code=500
         )
 
+@app.get("/api/validator-entities")
+async def get_validator_entities():
+    """Get entity information for configured validators"""
+    entities = {}
+    for validator_index in VALIDATOR_INDEXES:
+        entities[validator_index] = validator_gadget.get_validator_entity(validator_index)
+    return entities
+
+@app.get("/api/proposers")
+async def get_proposers():
+    """Get current and upcoming proposers with their entities"""
+    try:
+        proposers = await beacon_client.get_upcoming_proposers()
+        
+        # Sanitize and structure the data
+        sanitized_proposers = []
+        for proposer in proposers:
+            entity = validator_gadget.get_validator_entity(proposer['validator_index'])
+            sanitized_proposer = {
+                'slot': int(proposer['slot']),
+                'validator_index': int(proposer['validator_index']),
+                'when': str(proposer['when']),
+                'epoch': int(proposer['epoch']),
+                'is_current_slot': bool(proposer['is_current_slot']),
+                'entity': {
+                    'label': str(entity['label'] if entity else 'unknown'),
+                    'node_operator': str(entity['node_operator'] if entity else 'unknown')
+                }
+            }
+            sanitized_proposers.append(sanitized_proposer)
+            
+        return sanitized_proposers
+    except Exception as e:
+        logging.error(f"Error getting proposers: {e}")
+        import traceback
+        traceback.print_exc()
+        return []
+
 # In development mode, proxy non-API requests to React dev server
 if MODE == 'development':
     @app.get("/{full_path:path}")
@@ -155,9 +245,15 @@ if MODE == 'development':
                     media_type=response.headers.get("content-type", "text/html")
                 )
 else:
-    # In production mode, serve static files
+    # In production mode, verify dist directory exists before mounting
+    if not os.path.exists(REACT_APP_PATH):
+        raise RuntimeError(f"Production mode requires the '{REACT_APP_PATH}' directory. Run 'npm run build' in the ui directory first.")
     app.mount("/", StaticFiles(directory=REACT_APP_PATH, html=True), name="static")
 
 if __name__ == "__main__":
     print(f"Running in {MODE} mode")
+    if MODE == 'development':
+        print(f"Using React dev server at {REACT_DEV_SERVER}")
+    else:
+        print(f"Serving static files from {REACT_APP_PATH}")
     uvicorn.run(app, host=HOST, port=PORT)

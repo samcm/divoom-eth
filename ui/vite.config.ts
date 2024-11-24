@@ -10,6 +10,7 @@ export default defineConfig({
   build: {
     cssCodeSplit: false,
     minify: false,
+    target: 'esnext',
     rollupOptions: {
       output: {
         manualChunks: undefined,
@@ -32,5 +33,9 @@ export default defineConfig({
         },
       ],
     },
+    devSourcemap: true,
+    modules: {
+      generateScopedName: '[name]__[local]',
+    },
   },
-}) 
+})

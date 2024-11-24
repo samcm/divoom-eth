@@ -1,14 +1,16 @@
 import aiohttp
 import asyncio
-from typing import List, Dict, Callable, Any
+from typing import List, Dict, Callable, Any, Optional
 import time
 import json
 from datetime import datetime
 from collections import deque
+import logging
 
 class BeaconClient:
-    def __init__(self, node_url: str):
+    def __init__(self, node_url: str, validator_indexes: List[str]):
         self.node_url = node_url
+        self.validator_indexes = validator_indexes
         self.config = None
         self.genesis = None
         self._event_listeners: Dict[str, List[Callable]] = {
@@ -19,10 +21,17 @@ class BeaconClient:
         self.block_arrival_times = deque(maxlen=16)
         # Cache duties by epoch
         self.duties_cache = {
-            'proposer': {},  # epoch -> set of slots
+            'proposer': {},  # epoch -> dict of slot -> validator_index
             'attester': {},  # epoch -> set of slots
             'last_fetched_epoch': -1  # Track last fetched epoch
         }
+        # Initialize duties as a dict with lists instead of sets
+        self.duties = {
+            'proposer': [],
+            'attester': []
+        }
+        # Simple block cache
+        self.block_cache: Dict[int, str] = {}  # slot -> status
 
     async def initialize(self):
         """Fetch config and genesis data on startup"""
@@ -86,37 +95,43 @@ class BeaconClient:
         # Check if we already have duties for current and next epoch
         epochs_to_fetch = []
         for epoch in [current_epoch, current_epoch + 1]:
-            if (epoch not in self.duties_cache['proposer'] or 
-                epoch not in self.duties_cache['attester']):
+            if epoch not in self.duties_cache['proposer']:
                 epochs_to_fetch.append(epoch)
+                logging.info(f"Need to fetch duties for epoch {epoch}")
 
         if not epochs_to_fetch:
-            # If we have all duties cached, just combine them
+            logging.info(f"Using cached duties for epochs {current_epoch} and {current_epoch + 1}")
+            # Update combined duties from cache
             self.duties = {
-                'proposer': set().union(*[self.duties_cache['proposer'].get(e, set()) 
-                                        for e in [current_epoch, current_epoch + 1]]),
-                'attester': set().union(*[self.duties_cache['attester'].get(e, set()) 
-                                        for e in [current_epoch, current_epoch + 1]])
+                'proposer': [],
+                'attester': []
             }
+            for epoch in [current_epoch, current_epoch + 1]:
+                if epoch in self.duties_cache['proposer']:
+                    self.duties['proposer'].extend(self.duties_cache['proposer'][epoch].keys())
+                if epoch in self.duties_cache['attester']:
+                    self.duties['attester'].extend(list(self.duties_cache['attester'][epoch]))
             return
 
         # Fetch duties for epochs we don't have
         async with aiohttp.ClientSession() as session:
             for epoch in epochs_to_fetch:
+                logging.info(f"Fetching duties for epoch {epoch}")
                 # Initialize cache for this epoch
-                if epoch not in self.duties_cache['proposer']:
-                    self.duties_cache['proposer'][epoch] = set()
-                if epoch not in self.duties_cache['attester']:
-                    self.duties_cache['attester'][epoch] = set()
+                self.duties_cache['proposer'][epoch] = {}
+                self.duties_cache['attester'][epoch] = set()
 
-                # Fetch proposer duties
+                # Fetch proposer duties for the epoch
                 url = f"{self.node_url}/eth/v1/validator/duties/proposer/{epoch}"
                 async with session.get(url) as response:
                     if response.status == 200:
                         duties = await response.json()
+                        logging.info(f"Got proposer duties response: {duties}")
                         for duty in duties.get('data', []):
-                            if str(duty.get('validator_index')) in validator_indexes:
-                                self.duties_cache['proposer'][epoch].add(int(duty.get('slot')))
+                            slot = int(duty.get('slot'))
+                            validator_index = int(duty.get('validator_index'))
+                            self.duties_cache['proposer'][epoch][slot] = validator_index
+                            logging.info(f"Added proposer duty: epoch={epoch}, slot={slot}, validator={validator_index}")
 
                 # Fetch attester duties
                 url = f"{self.node_url}/eth/v1/validator/duties/attester/{epoch}"
@@ -135,13 +150,7 @@ class BeaconClient:
                 if epoch >= current_epoch
             }
 
-        # Combine current and next epoch duties
-        self.duties = {
-            'proposer': set().union(*[self.duties_cache['proposer'].get(e, set()) 
-                                    for e in [current_epoch, current_epoch + 1]]),
-            'attester': set().union(*[self.duties_cache['attester'].get(e, set()) 
-                                    for e in [current_epoch, current_epoch + 1]])
-        }
+        logging.info(f"Duties cache after update: {self.duties_cache['proposer']}")
 
     async def get_slots(self, validator_indexes: List[str]):
         """Get slots from last 6 epochs and next epoch"""
@@ -151,7 +160,7 @@ class BeaconClient:
         
         # Get slots from five epochs ago until next epoch
         start_slot = epoch_data['current_epoch_start_slot'] - (slots_per_epoch * 5)
-        end_slot = epoch_data['current_epoch_start_slot'] + (slots_per_epoch * 2) - 1  # Include next epoch
+        end_slot = epoch_data['current_epoch_start_slot'] + (slots_per_epoch * 2) - 1
         
         print(f"Processing slots from {start_slot} to {end_slot} (current slot: {current_slot})")
         
@@ -171,6 +180,12 @@ class BeaconClient:
             # Update duties before returning slots
             await self.update_duties(validator_indexes)
             
+            # Convert duties to a format that can be JSON serialized
+            duties_json = {
+                'proposer': list(self.duties['proposer']),
+                'attester': list(self.duties['attester'])
+            }
+            
             return {
                 'slots': slots,
                 'epoch_data': epoch_data,
@@ -178,11 +193,14 @@ class BeaconClient:
                     'finalized': finalized_epoch,
                     'justified': justified_epoch
                 },
-                'duties': self.duties
+                'duties': duties_json
             }
 
     async def _check_slot(self, session, url: str, slot: int, current_slot: int):
         """Check slot status and return appropriate state"""
+        # Clean cache on access
+        self._clean_block_cache(current_slot)
+        
         # Future slot
         if slot > current_slot:
             return {
@@ -190,16 +208,20 @@ class BeaconClient:
                 "status": "upcoming"
             }
         
+        # Check cache first
+        if slot in self.block_cache:
+            return {
+                "slot": slot,
+                "status": self.block_cache[slot]
+            }
+        
         # Current slot
         if slot == current_slot:
             try:
                 async with session.get(url) as response:
-                    if response.status == 404:
-                        return {"slot": slot, "status": "pending"}
-                    elif response.status == 200:
+                    if response.status == 200:
                         return {"slot": slot, "status": "proposed"}
-                    else:
-                        return {"slot": slot, "status": "pending"}
+                    return {"slot": slot, "status": "pending"}
             except:
                 return {"slot": slot, "status": "pending"}
         
@@ -209,15 +231,55 @@ class BeaconClient:
                 if response.status == 404:
                     # More than 2 slots old and missing
                     if current_slot - slot > 2:
-                        return {"slot": slot, "status": "missing"}
-                    # Recent missing slot
-                    return {"slot": slot, "status": "pending"}
+                        status = "missing"
+                    else:
+                        # Recent missing slot
+                        status = "pending"
                 elif response.status == 200:
-                    return {"slot": slot, "status": "proposed"}
+                    status = "proposed"
+                    # Cache only if block was found and is old enough
+                    if current_slot - slot > 16:
+                        self.block_cache[slot] = status
                 else:
-                    return {"slot": slot, "status": "missing"}
+                    status = "missing"
+                return {"slot": slot, "status": status}
         except:
             return {"slot": slot, "status": "missing"}
+
+    def _clean_block_cache(self, current_slot: int):
+        """Remove old slots from cache (older than 8 epochs)"""
+        slots_per_epoch = int(self.config['data']['SLOTS_PER_EPOCH'])
+        max_age = slots_per_epoch * 8
+        oldest_allowed = current_slot - max_age
+        
+        # Remove old entries
+        self.block_cache = {
+            slot: status 
+            for slot, status in self.block_cache.items() 
+            if slot > oldest_allowed
+        }
+
+    async def _cache_epoch(self, session, epoch: int, current_slot: int):
+        """Cache all slots for a given epoch"""
+        if epoch in self.cached_epochs:
+            return
+
+        slots_per_epoch = int(self.config['data']['SLOTS_PER_EPOCH'])
+        start_slot = epoch * slots_per_epoch
+        end_slot = start_slot + slots_per_epoch
+
+        tasks = []
+        for slot in range(start_slot, end_slot):
+            if slot not in self.block_cache and slot <= current_slot:
+                url = f"{self.node_url}/eth/v1/beacon/blocks/{slot}"
+                tasks.append(self._check_slot(session, url, slot, current_slot))
+
+        if tasks:
+            results = await asyncio.gather(*tasks)
+            for result in results:
+                self.block_cache[result['slot']] = result['status']
+
+        self.cached_epochs.add(epoch)
 
     async def get_validator_status_summary(self, validator_indexes: List[str]) -> Dict:
         async with aiohttp.ClientSession() as session:
@@ -356,3 +418,43 @@ class BeaconClient:
     def add_slot_listener(self, callback: Callable[[Dict], Any]):
         """Add a listener for slot changes"""
         self._event_listeners['slot'].append(callback)
+
+    async def get_upcoming_proposers(self) -> List[Dict]:
+        """Get proposers for current and next epoch"""
+        try:
+            current_slot = self.calculate_current_slot()
+            slots_per_epoch = int(self.config['data']['SLOTS_PER_EPOCH'])
+            current_epoch = current_slot // slots_per_epoch
+        
+            
+            # Make sure we have duties for current and next epoch
+            await self.update_duties(self.validator_indexes)
+            
+            proposers = []
+            epochs_to_check = [current_epoch, current_epoch + 1]
+
+            for epoch in epochs_to_check:
+                epoch_duties = self.duties_cache['proposer'].get(epoch, {})
+                if not epoch_duties:
+                    continue
+                    
+                epoch_start = epoch * slots_per_epoch
+                epoch_end = (epoch + 1) * slots_per_epoch
+                
+                for slot in range(epoch_start, epoch_end):
+                    if slot in epoch_duties:
+                        proposer = {
+                            'slot': slot,
+                            'validator_index': epoch_duties[slot],
+                            'when': 'current_epoch' if epoch == current_epoch else 'next_epoch',
+                            'epoch': epoch,
+                            'is_current_slot': slot == current_slot
+                        }
+                        proposers.append(proposer)
+                    
+            return proposers
+        except Exception as e:
+            print(f"Error getting upcoming proposers: {e}")
+            import traceback
+            traceback.print_exc()
+            return []
