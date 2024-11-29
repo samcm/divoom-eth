@@ -137,9 +137,6 @@ async def capture_react_page():
             omit_background=False,
         )
         
-        with open('latest_screenshot.png', 'wb') as f:
-            f.write(screenshot)
-            
         await browser.close()
         return screenshot
 
