@@ -16,6 +16,7 @@ export default defineConfig({
         manualChunks: undefined,
       },
     },
+    assetsInlineLimit: 0,
   },
   css: {
     postcss: {
