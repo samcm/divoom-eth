@@ -36,8 +36,18 @@ function Proposer() {
   const currentProposer = getCurrentProposer();
   console.log('Rendering with proposer:', currentProposer);
 
+  const getEpochInfo = () => {
+    if (!currentProposer) return { epoch: 0, progress: 0 };
+    const epoch = Math.floor(currentProposer.slot / 32);
+    const slotsIntoEpoch = currentProposer.slot % 32;
+    const progress = Math.round((slotsIntoEpoch / 32) * 100);
+    return { epoch, progress };
+  };
+
+  const { epoch, progress } = getEpochInfo();
+
   return (
-    <BaseLayout title="ETHEREUM">
+    <BaseLayout title="NEXT BLOCK PROPOSER">
       <SlotHistory />
       
       {currentProposer ? (
@@ -50,8 +60,16 @@ function Proposer() {
           gap: '2px',
         }}>
           <div style={{
+            color: '#997700',
+            fontSize: '5px',
+            fontFamily: '"Pixelify Sans", monospace',
+            whiteSpace: 'pre',
+          }}>
+            EPOCH: {epoch} ({progress}%)
+          </div>
+          <div style={{
             color: '#00ff00',
-            fontSize: '8px',
+            fontSize: '5px',
             fontFamily: '"Pixelify Sans", monospace',
             whiteSpace: 'pre',
           }}>
@@ -59,19 +77,19 @@ function Proposer() {
           </div>
           <div style={{
             color: '#0088ff',
-            fontSize: '8px',
+            fontSize: '5px',
             fontFamily: '"Pixelify Sans", monospace',
             whiteSpace: 'pre',
           }}>
-            VAL: {currentProposer.validator_index}
+            PROP: {currentProposer.validator_index}
           </div>
           <div style={{
             color: '#666666',
-            fontSize: '8px',
+            fontSize: '5px',
             fontFamily: '"Pixelify Sans", monospace',
             whiteSpace: 'pre',
           }}>
-            {getEntityName(currentProposer.entity).substring(0, 14).toUpperCase()}
+            {getEntityName(currentProposer.entity).substring(0, 15).toUpperCase()}
           </div>
         </div>
       ) : (
@@ -91,4 +109,4 @@ function Proposer() {
   );
 }
 
-export default Proposer; 
+export default Proposer;

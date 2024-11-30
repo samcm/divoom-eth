@@ -127,7 +127,7 @@ async def capture_react_page():
         """)
         
         # Use dev server in development mode, local server in production
-        url = REACT_DEV_SERVER if MODE == 'development' else f"http://localhost:{PORT}"
+        url = f"http://localhost:{PORT}"
         await page.goto(url)
         await page.wait_for_timeout(2000)
         

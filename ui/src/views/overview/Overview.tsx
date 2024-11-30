@@ -89,7 +89,7 @@ function Overview() {
   };
 
   return (
-    <BaseLayout>
+    <BaseLayout title="BLOCK ARRIVAL TIMES">
       <SlotHistory/>
       {renderArrivalTimes()}
       
@@ -130,10 +130,10 @@ function Overview() {
       {status && (
         <div style={{
           position: 'absolute',
-          bottom: '-1px',
-          left: '2px',
+          bottom: '0px',
+          left: '6px',
           color: '#0088ff',
-          fontSize: '11px',
+          fontSize: '10px',
           fontFamily: '"Pixelify Sans", monospace',
           fontWeight: '400',
           WebkitFontSmoothing: 'none',

@@ -14,10 +14,10 @@ function App() {
       const now = new Date();
       const dayOfWeek = now.getDay();
       const hour = now.getHours();
-      const sixHourBlock = Math.floor(hour / 6);
+      const sixHourBlock = Math.floor(hour / 2);
       
       const views: View[] = [
-        'proposer', 
+        // 'proposer', 
         'overview', 
         // 'entities'
       ];
