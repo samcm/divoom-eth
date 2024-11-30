@@ -15,6 +15,10 @@ import requests
 from tqdm import tqdm
 import logging
 from contextlib import asynccontextmanager
+from PIL import Image
+import io
+import tkinter as tk
+from PIL import Image, ImageTk
 
 logging.basicConfig(
     level=logging.INFO,
@@ -119,24 +123,42 @@ async def capture_react_page():
         
         page = await context.new_page()
         
+        # Enhanced anti-aliasing prevention
         await page.add_init_script("""
-            CSS.supports = () => false;
-            document.body.style.webkitFontSmoothing = 'none';
-            document.body.style.mozOsxFontSmoothing = 'none';
-            document.body.style.textRendering = 'geometricPrecision';
+            document.addEventListener('DOMContentLoaded', () => {
+                const style = document.createElement('style');
+                style.textContent = `
+                    * {
+                        image-rendering: pixelated !important;
+                        -webkit-font-smoothing: none !important;
+                        -moz-osx-font-smoothing: none !important;
+                        font-smoothing: none !important;
+                        text-rendering: optimizeSpeed !important;
+                        transform: translate3d(0, 0, 0);
+                        backface-visibility: hidden;
+                    }
+                `;
+                document.head.appendChild(style);
+            });
         """)
         
-        url =  f"http://localhost:{PORT}"
+        url = f"http://localhost:{PORT}"
         await page.goto(url)
         await page.wait_for_timeout(2000)
         
         screenshot = await page.screenshot(
-            clip={'x': 0, 'y': 0, 'width': 64, 'height': 64},
             type='png',
             omit_background=False,
+            scale='css',
+            animations='disabled',
         )
         
         await browser.close()
+        
+        # Debug save
+        with open('debug_screenshot.png', 'wb') as f:
+            f.write(screenshot)
+            
         return screenshot
 
 async def handle_head_event(event_data: Dict):

@@ -89,7 +89,7 @@ function Overview() {
   };
 
   return (
-    <BaseLayout title="BLOCK ARRIVAL TIMES">
+    <BaseLayout title="ARRIVALS">
       <SlotHistory/>
       {renderArrivalTimes()}
       

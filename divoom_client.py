@@ -13,13 +13,13 @@ class DivoomClient:
         
         # Crop to 64x64
         width, height = image.size
-        left = (width - 64) // 2
-        top = (height - 64) // 2
-        cropped = image.crop((left, top, left + 64, top + 64))
+        # left = (width - 64) // 2
+        # top = (height - 64) // 2
+        # cropped = image.crop((left, top, left + 64, top + 64))
         
         # Convert back to bytes
         img_byte_arr = io.BytesIO()
-        cropped.save(img_byte_arr, format='PNG')
+        image.save(img_byte_arr, format='PNG')
         img_byte_arr = img_byte_arr.getvalue()
 
         async with aiohttp.ClientSession() as session:

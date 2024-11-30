@@ -47,8 +47,30 @@ function Proposer() {
   const { epoch, progress } = getEpochInfo();
 
   return (
-    <BaseLayout title="NEXT BLOCK PROPOSER">
+    <BaseLayout title="UP NEXT">
       <SlotHistory />
+      
+      {/* Debug grid - 8x8 pixel boundaries */}
+      <div style={{
+        position: 'absolute',
+        top: 0,
+        left: 0,
+        width: '64px',
+        height: '64px',
+        display: 'grid',
+        gridTemplateColumns: 'repeat(8, 8px)',
+        gridTemplateRows: 'repeat(8, 8px)',
+        pointerEvents: 'none',
+      }}>
+        {Array.from({ length: 64 }).map((_, i) => (
+          <div key={i} style={{
+            width: '8px',
+            height: '8px',
+            border: '1px solid rgba(255, 0, 0, 0.2)',
+            backgroundColor: `rgba(${Math.floor(i / 8) * 30}, ${(i % 8) * 30}, 0, 0.1)`,
+          }} />
+        ))}
+      </div>
       
       {currentProposer ? (
         <div style={{
@@ -57,39 +79,51 @@ function Proposer() {
           left: '2px',
           display: 'flex',
           flexDirection: 'column',
-          gap: '2px',
+          gap: '0px',
+          lineHeight: '5px'
         }}>
           <div style={{
             color: '#997700',
             fontSize: '5px',
             fontFamily: '"Pixelify Sans", monospace',
             whiteSpace: 'pre',
+            marginBottom: '0px',
+            lineHeight: '5px',
+            height: '5px'
           }}>
-            EPOCH: {epoch} ({progress}%)
+            E: {epoch}
           </div>
           <div style={{
             color: '#00ff00',
             fontSize: '5px',
             fontFamily: '"Pixelify Sans", monospace',
             whiteSpace: 'pre',
+            marginBottom: '0px',
+            lineHeight: '5px',
+            height: '5px'
           }}>
-            SLOT: {currentProposer.slot}
+            S: {currentProposer.slot}
           </div>
           <div style={{
             color: '#0088ff',
             fontSize: '5px',
             fontFamily: '"Pixelify Sans", monospace',
             whiteSpace: 'pre',
+            marginBottom: '0px',
+            lineHeight: '5px',
+            height: '5px'
           }}>
-            PROP: {currentProposer.validator_index}
+            P: {currentProposer.validator_index}
           </div>
           <div style={{
             color: '#666666',
             fontSize: '5px',
             fontFamily: '"Pixelify Sans", monospace',
             whiteSpace: 'pre',
+            lineHeight: '5px',
+            height: '5px'
           }}>
-            {getEntityName(currentProposer.entity).substring(0, 15).toUpperCase()}
+            {getEntityName(currentProposer.entity).substring(0, 8).toUpperCase()}
           </div>
         </div>
       ) : (

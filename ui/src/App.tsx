@@ -18,7 +18,7 @@ function App() {
       
       const views: View[] = [
         // 'proposer', 
-        'overview', 
+        // 'overview', 
         // 'entities'
       ];
       const totalBlocks = views.length * 4; // 4 six-hour blocks per day
