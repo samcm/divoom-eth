@@ -154,10 +154,6 @@ async def capture_react_page():
         )
         
         await browser.close()
-        
-        # Debug save
-        with open('debug_screenshot.png', 'wb') as f:
-            f.write(screenshot)
             
         return screenshot
 
