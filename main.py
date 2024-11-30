@@ -126,8 +126,7 @@ async def capture_react_page():
             document.body.style.textRendering = 'geometricPrecision';
         """)
         
-        # Use dev server in development mode, local server in production
-        url = f"http://localhost:{PORT}"
+        url =  f"http://localhost:{PORT}"
         await page.goto(url)
         await page.wait_for_timeout(2000)
         
