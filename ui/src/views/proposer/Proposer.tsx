@@ -50,32 +50,10 @@ function Proposer() {
     <BaseLayout title="UP NEXT">
       <SlotHistory />
       
-      {/* Debug grid - 8x8 pixel boundaries */}
-      <div style={{
-        position: 'absolute',
-        top: 0,
-        left: 0,
-        width: '64px',
-        height: '64px',
-        display: 'grid',
-        gridTemplateColumns: 'repeat(8, 8px)',
-        gridTemplateRows: 'repeat(8, 8px)',
-        pointerEvents: 'none',
-      }}>
-        {Array.from({ length: 64 }).map((_, i) => (
-          <div key={i} style={{
-            width: '8px',
-            height: '8px',
-            border: '1px solid rgba(255, 0, 0, 0.2)',
-            backgroundColor: `rgba(${Math.floor(i / 8) * 30}, ${(i % 8) * 30}, 0, 0.1)`,
-          }} />
-        ))}
-      </div>
-      
       {currentProposer ? (
         <div style={{
           position: 'absolute',
-          top: '28px',
+          top: '30px',
           left: '2px',
           display: 'flex',
           flexDirection: 'column',
@@ -84,44 +62,37 @@ function Proposer() {
         }}>
           <div style={{
             color: '#997700',
-            fontSize: '5px',
+            fontSize: '8px',
             fontFamily: '"Pixelify Sans", monospace',
             whiteSpace: 'pre',
-            marginBottom: '0px',
-            lineHeight: '5px',
-            height: '5px'
+            marginBottom: '4px',
           }}>
-            E: {epoch}
-          </div>
-          <div style={{
-            color: '#00ff00',
-            fontSize: '5px',
-            fontFamily: '"Pixelify Sans", monospace',
-            whiteSpace: 'pre',
-            marginBottom: '0px',
-            lineHeight: '5px',
-            height: '5px'
-          }}>
-            S: {currentProposer.slot}
+            E:{epoch}
           </div>
           <div style={{
             color: '#0088ff',
-            fontSize: '5px',
+            fontSize: '8px',
             fontFamily: '"Pixelify Sans", monospace',
             whiteSpace: 'pre',
-            marginBottom: '0px',
-            lineHeight: '5px',
-            height: '5px'
+            marginBottom: '4px',
           }}>
-            P: {currentProposer.validator_index}
+            P:{currentProposer.validator_index}
           </div>
           <div style={{
-            color: '#666666',
-            fontSize: '5px',
+            color: '#00ff00',
+            fontSize: '8px',
             fontFamily: '"Pixelify Sans", monospace',
             whiteSpace: 'pre',
-            lineHeight: '5px',
-            height: '5px'
+            marginBottom: '4px',
+          }}>
+            SLOT: {Math.floor(currentProposer.slot % 32)}
+          </div>
+          <div style={{
+            color: '#888888',
+            fontSize: '8px',
+            fontFamily: '"Pixelify Sans", monospace',
+            whiteSpace: 'pre',
+            marginBottom: '4px',
           }}>
             {getEntityName(currentProposer.entity).substring(0, 8).toUpperCase()}
           </div>

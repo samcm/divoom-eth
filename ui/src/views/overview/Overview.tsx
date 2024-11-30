@@ -130,21 +130,14 @@ function Overview() {
       {status && (
         <div style={{
           position: 'absolute',
-          bottom: '0px',
-          left: '6px',
+          bottom: '1px',
           color: '#0088ff',
-          fontSize: '10px',
+          fontSize: '8px',
           fontFamily: '"Pixelify Sans", monospace',
           fontWeight: '400',
-          WebkitFontSmoothing: 'none',
-          MozOsxFontSmoothing: 'none',
-          fontSmooth: 'never',
-          textRendering: 'geometricPrecision',
-          transform: 'translate(0, 0)',
-          letterSpacing: '0px',
           whiteSpace: 'pre',
         }}>
-          VALS: {Math.round(status.active/status.total*100)}%
+          VALS:{Math.round(status.active/status.total*100)}%
         </div>
       )}
     </BaseLayout>

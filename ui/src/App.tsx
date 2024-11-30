@@ -1,15 +1,21 @@
-import React from 'react';
-import { useState, useEffect } from 'react';
+import React, { useEffect, useState } from 'react';
+import { BrowserRouter, Routes, Route, Navigate, useLocation } from 'react-router-dom';
 import Overview from './views/overview/Overview';
 import Entities from './views/entities/Entities';
 import Proposer from './views/proposer/Proposer';
 
 type View = 'overview' | 'entities' | 'proposer';
 
-function App() {
+function TimeBasedRouter() {
   const [currentView, setCurrentView] = useState<View>('overview');
+  const location = useLocation();
 
   useEffect(() => {
+    // Only run if we're on the root path
+    if (location.pathname !== '/') {
+      return;
+    }
+
     const updateView = () => {
       const now = new Date();
       const dayOfWeek = now.getDay();
@@ -17,11 +23,11 @@ function App() {
       const sixHourBlock = Math.floor(hour / 2);
       
       const views: View[] = [
-        // 'proposer', 
-        // 'overview', 
+        'proposer', 
+        'overview', 
         // 'entities'
       ];
-      const totalBlocks = views.length * 4; // 4 six-hour blocks per day
+      const totalBlocks = views.length * 4;
       const blockIndex = (dayOfWeek * 4 + sixHourBlock) % totalBlocks;
       const viewIndex = Math.floor(blockIndex / 4);
       
@@ -32,22 +38,35 @@ function App() {
     const interval = setInterval(updateView, 1000 * 60); // Check every minute
     
     return () => clearInterval(interval);
-  }, []);
+  }, [location.pathname]);
 
-  const renderView = () => {
-    switch (currentView) {
-      case 'proposer':
-        return <Proposer />;
-      case 'entities':
-        return <Entities />;
-      case 'overview':
-        return <Overview />;
-      default:
-        return <Proposer />;
-    }
-  };
+  if (location.pathname !== '/') {
+    return null;
+  }
 
-  return renderView();
+  switch (currentView) {
+    case 'proposer':
+      return <Proposer />;
+    case 'entities':
+      return <Entities />;
+    case 'overview':
+      return <Overview />;
+    default:
+      return <Overview />;
+  }
+}
+
+function App() {
+  return (
+    <BrowserRouter>
+      <Routes>
+        <Route path="/views/overview" element={<Overview />} />
+        <Route path="/views/entities" element={<Entities />} />
+        <Route path="/views/proposer" element={<Proposer />} />
+        <Route path="/" element={<TimeBasedRouter />} />
+      </Routes>
+    </BrowserRouter>
+  );
 }
 
 export default App;
