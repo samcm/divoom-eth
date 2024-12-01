@@ -419,10 +419,14 @@ async def get_l2_metrics():
         "is_connected": l2_tracker.get_connection_status()
     }
 
-# In development mode, proxy non-API requests to React dev server
-if MODE == 'development':
-    @app.get("/{full_path:path}")
-    async def proxy_to_react(full_path: str):
+# Verify dist directory exists before mounting
+if not os.path.exists(REACT_APP_PATH):
+    raise RuntimeError(f"Production mode requires the '{REACT_APP_PATH}' directory. Run 'npm run build' in the ui directory first.")
+
+@app.get("/{full_path:path}")
+async def proxy_to_react(full_path: str):
+    if MODE == 'development':
+        # In dev mode, proxy to React dev server
         async with httpx.AsyncClient() as client:
             try:
                 response = await client.get(f"{REACT_DEV_SERVER}/{full_path}")
@@ -437,11 +441,17 @@ if MODE == 'development':
                     content=response.content,
                     media_type=response.headers.get("content-type", "text/html")
                 )
-else:
-    # In production mode, verify dist directory exists before mounting
-    if not os.path.exists(REACT_APP_PATH):
-        raise RuntimeError(f"Production mode requires the '{REACT_APP_PATH}' directory. Run 'npm run build' in the ui directory first.")
-    app.mount("/", StaticFiles(directory=REACT_APP_PATH, html=True), name="static")
+    else:
+        # In prod mode, serve from static files
+        try:
+            with open(f"{REACT_APP_PATH}/{full_path}", "rb") as f:
+                content = f.read()
+            return Response(content=content, media_type="text/html")
+        except:
+            # Fallback to index.html for client-side routing
+            with open(f"{REACT_APP_PATH}/index.html", "rb") as f:
+                content = f.read()
+            return Response(content=content, media_type="text/html")
 
 async def load_historical_blocks():
     """Lazily load the last 5 epochs of blocks"""

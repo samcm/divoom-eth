@@ -39,14 +39,6 @@ function BaseLayout({ children, title = 'BEACON CHAIN' }: BaseLayoutProps) {
       }}>
         {title}
       </div>
-      <div style={{
-        width: '100%',
-        height: '1px',
-        opacity: '0.5',
-        backgroundColor: '#333333',
-        marginTop: '0px',
-        marginBottom: '2px'
-      }} />
       {children}
     </div>
   );
