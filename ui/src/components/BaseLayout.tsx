@@ -24,7 +24,7 @@ function BaseLayout({ children, title = 'BEACON CHAIN' }: BaseLayoutProps) {
       transformOrigin: 'top left',          // Scale from top-left corner
     }}>
       <div style={{
-        color: '#666666',
+        color: '#ffffff',
         fontSize: '8px',
         height: 'auto', // Allow height to adjust
         fontFamily: '"Pixelify Sans", monospace',
@@ -39,7 +39,14 @@ function BaseLayout({ children, title = 'BEACON CHAIN' }: BaseLayoutProps) {
       }}>
         {title}
       </div>
-
+      <div style={{
+        width: '100%',
+        height: '1px',
+        opacity: '0.5',
+        backgroundColor: '#333333',
+        marginTop: '0px',
+        marginBottom: '2px'
+      }} />
       {children}
     </div>
   );

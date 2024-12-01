@@ -20,6 +20,11 @@ import io
 import tkinter as tk
 from PIL import Image, ImageTk
 from datetime import datetime, timedelta
+import aiohttp
+import json
+from typing import Dict, List, Optional
+from dataclasses import dataclass
+from l2_metrics import L2MetricsTracker
 
 logging.basicConfig(
     level=logging.INFO,
@@ -39,7 +44,7 @@ PORT = int(os.getenv('PORT', '8000'))
 MODE = os.getenv('MODE', 'production')
 REACT_DEV_SERVER = "http://localhost:5173" if MODE == 'development' else None
 VIEW_INTERVAL_MINUTES = int(os.getenv('VIEW_INTERVAL_MINUTES', '30'))
-ENABLED_VIEWS = os.getenv('ENABLED_VIEWS', 'proposer,overview,execution').split(',')
+ENABLED_VIEWS = os.getenv('ENABLED_VIEWS', 'proposer,overview,execution,layer2').split(',')
 
 # Validate configuration
 if not BEACON_NODE_URL:
@@ -89,6 +94,9 @@ class ViewRotation:
         self.override_view = view if view != "none" else None
         self.override_until = datetime.now() + timedelta(minutes=duration_minutes) if view != "none" else None
 
+# Add to the global variables
+l2_tracker = L2MetricsTracker()
+
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     # Download validator mapping if needed
@@ -110,10 +118,19 @@ async def lifespan(app: FastAPI):
     asyncio.create_task(beacon_client.start_slot_timer())
     print("Started SSE subscription and slot timer")
     
+    # Start L2 tracker
+    await l2_tracker.start()
+    
+    # Start L2 display update task
+    asyncio.create_task(update_l2_display())
+    
     yield  # Server is running
     
     # Cleanup (if needed)
     print("Shutting down...")
+    
+    # Stop L2 tracker
+    await l2_tracker.stop()
 
 app = FastAPI(lifespan=lifespan)
 
@@ -130,6 +147,16 @@ beacon_client = BeaconClient(BEACON_NODE_URL, VALIDATOR_INDEXES)
 divoom_client = DivoomClient(DIVOOM_API_ENDPOINT)
 validator_gadget = ValidatorGadget()
 view_rotation = ViewRotation(ENABLED_VIEWS, VIEW_INTERVAL_MINUTES)
+
+async def update_l2_display():
+    while True:
+        if view_rotation.get_current_view() == "layer2":
+            try:
+                screenshot = await capture_react_page()
+                await divoom_client.update_display(screenshot)
+            except Exception as e:
+                print(f"Error updating L2 display: {e}")
+        await asyncio.sleep(0.5)
 
 def download_validator_mapping():
     """Downloads the validator mapping file if it doesn't exist"""
@@ -203,21 +230,27 @@ async def capture_react_page():
 
 async def handle_head_event(event_data: Dict):
     """Handle new head events by updating the Divoom display"""
-    print(f"Re-rendering display for head event")
-    try:
-        screenshot = await capture_react_page()
-        await divoom_client.update_display(screenshot)
-    except Exception as e:
-        print(f"Error updating display on head event: {e}")
+    if view_rotation.get_current_view() == "overview" or \
+       view_rotation.get_current_view() == "execution" or \
+       view_rotation.get_current_view() == "proposer":
+        print(f"Re-rendering display for head event")
+        try:
+            screenshot = await capture_react_page()
+            await divoom_client.update_display(screenshot)
+        except Exception as e:
+            print(f"Error updating display on head event: {e}")
 
 async def handle_slot_change(slot_data: Dict):
     """Handle slot changes by updating the Divoom display"""
-    print(f"Re-rendering display for slot {slot_data['slot']}")
-    try:
-        screenshot = await capture_react_page()
-        await divoom_client.update_display(screenshot)
-    except Exception as e:
-        print(f"Error updating display on slot change: {e}")
+    if view_rotation.get_current_view() == "overview" or \
+       view_rotation.get_current_view() == "execution" or \
+       view_rotation.get_current_view() == "proposer":
+        print(f"Re-rendering display for slot {slot_data['slot']}")
+        try:
+            screenshot = await capture_react_page()
+            await divoom_client.update_display(screenshot)
+        except Exception as e:
+            print(f"Error updating display on slot change: {e}")
 
 @app.get("/api/status")
 async def get_status():
@@ -342,8 +375,11 @@ async def get_current_view():
 
 @app.get("/api/views/available")
 async def get_available_views():
+    # Filter out L2 metrics view if not connected
+    available_views = [view for view in ENABLED_VIEWS if view != "layer2" or l2_tracker.get_connection_status()]
+    
     return {
-        "views": ENABLED_VIEWS,
+        "views": available_views,
         "currentOverride": {
             "view": view_rotation.override_view,
             "until": view_rotation.override_until.isoformat() if view_rotation.override_until else None
@@ -360,6 +396,22 @@ async def set_view_override(
         return {"status": "success"}
     except ValueError as e:
         return {"status": "error", "message": str(e)}
+
+@app.get("/api/l2metrics")
+async def get_l2_metrics():
+    top_l2s = l2_tracker.get_top_l2s(5)
+    return {
+        "total_tps": round(l2_tracker.total_tps, 2),
+        "total_gas": l2_tracker.total_gas,
+        "top_l2s": [
+            {
+                "name": l2.name,
+                "tps": round(l2.tps, 2),
+                "gas_used": l2.gas_used
+            } for l2 in top_l2s
+        ],
+        "is_connected": l2_tracker.get_connection_status()
+    }
 
 # In development mode, proxy non-API requests to React dev server
 if MODE == 'development':

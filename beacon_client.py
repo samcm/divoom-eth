@@ -35,9 +35,11 @@ class BeaconClient:
         self.block_cache: Dict[int, Dict] = {}  # slot -> {status: str, data?: Dict}
         self.rewards_cache = {}  # epoch -> rewards data
         self.max_cached_epochs = 10  # Keep last 10 epochs in memory
+        self.session = None
 
     async def initialize(self):
         """Fetch config and genesis data on startup"""
+        self.session = aiohttp.ClientSession()
         self.config = await self._fetch_config()
         self.genesis = await self._fetch_genesis()
         print(f"Slots per epoch: {self.config['data']['SLOTS_PER_EPOCH']}")
@@ -46,18 +48,16 @@ class BeaconClient:
         await self._prewarm_block_cache()
 
     async def _fetch_config(self):
-        async with aiohttp.ClientSession() as session:
-            async with session.get(f"{self.node_url}/eth/v1/config/spec") as response:
-                if response.status != 200:
-                    raise Exception(f"Failed to fetch config: {await response.text()}")
-                return await response.json()
+        async with self.session.get(f"{self.node_url}/eth/v1/config/spec") as response:
+            if response.status != 200:
+                raise Exception(f"Failed to fetch config: {await response.text()}")
+            return await response.json()
 
     async def _fetch_genesis(self):
-        async with aiohttp.ClientSession() as session:
-            async with session.get(f"{self.node_url}/eth/v1/beacon/genesis") as response:
-                if response.status != 200:
-                    raise Exception(f"Failed to fetch genesis: {await response.text()}")
-                return await response.json()
+        async with self.session.get(f"{self.node_url}/eth/v1/beacon/genesis") as response:
+            if response.status != 200:
+                raise Exception(f"Failed to fetch genesis: {await response.text()}")
+            return await response.json()
 
     def calculate_current_slot(self) -> int:
         if not self.config or not self.genesis:
@@ -87,11 +87,10 @@ class BeaconClient:
 
     async def get_checkpoints(self):
         """Fetch current finalized and justified checkpoints"""
-        async with aiohttp.ClientSession() as session:
-            async with session.get(f"{self.node_url}/eth/v1/beacon/states/head/finality_checkpoints") as response:
-                if response.status != 200:
-                    raise Exception(f"Failed to fetch checkpoints: {await response.text()}")
-                return await response.json()
+        async with self.session.get(f"{self.node_url}/eth/v1/beacon/states/head/finality_checkpoints") as response:
+            if response.status != 200:
+                raise Exception(f"Failed to fetch checkpoints: {await response.text()}")
+            return await response.json()
 
     async def update_duties(self, validator_indexes: List[str]):
         """Fetch and update proposer and attester duties"""
@@ -120,33 +119,32 @@ class BeaconClient:
             return
 
         # Fetch duties for epochs we don't have
-        async with aiohttp.ClientSession() as session:
-            for epoch in epochs_to_fetch:
-                logging.info(f"Fetching duties for epoch {epoch}")
-                # Initialize cache for this epoch
-                self.duties_cache['proposer'][epoch] = {}
-                self.duties_cache['attester'][epoch] = set()
+        for epoch in epochs_to_fetch:
+            logging.info(f"Fetching duties for epoch {epoch}")
+            # Initialize cache for this epoch
+            self.duties_cache['proposer'][epoch] = {}
+            self.duties_cache['attester'][epoch] = set()
 
-                # Fetch proposer duties for the epoch
-                url = f"{self.node_url}/eth/v1/validator/duties/proposer/{epoch}"
-                async with session.get(url) as response:
-                    if response.status == 200:
-                        duties = await response.json()
-                        logging.info(f"Got proposer duties response: {duties}")
-                        for duty in duties.get('data', []):
-                            slot = int(duty.get('slot'))
-                            validator_index = int(duty.get('validator_index'))
-                            self.duties_cache['proposer'][epoch][slot] = validator_index
-                            logging.info(f"Added proposer duty: epoch={epoch}, slot={slot}, validator={validator_index}")
+            # Fetch proposer duties for the epoch
+            url = f"{self.node_url}/eth/v1/validator/duties/proposer/{epoch}"
+            async with self.session.get(url) as response:
+                if response.status == 200:
+                    duties = await response.json()
+                    logging.info(f"Got proposer duties response: {duties}")
+                    for duty in duties.get('data', []):
+                        slot = int(duty.get('slot'))
+                        validator_index = int(duty.get('validator_index'))
+                        self.duties_cache['proposer'][epoch][slot] = validator_index
+                        logging.info(f"Added proposer duty: epoch={epoch}, slot={slot}, validator={validator_index}")
 
-                # Fetch attester duties
-                url = f"{self.node_url}/eth/v1/validator/duties/attester/{epoch}"
-                headers = {'Content-Type': 'application/json'}
-                async with session.post(url, json=validator_indexes, headers=headers) as response:
-                    if response.status == 200:
-                        duties = await response.json()
-                        for duty in duties.get('data', []):
-                            self.duties_cache['attester'][epoch].add(int(duty.get('slot')))
+            # Fetch attester duties
+            url = f"{self.node_url}/eth/v1/validator/duties/attester/{epoch}"
+            headers = {'Content-Type': 'application/json'}
+            async with self.session.post(url, json=validator_indexes, headers=headers) as response:
+                if response.status == 200:
+                    duties = await response.json()
+                    for duty in duties.get('data', []):
+                        self.duties_cache['attester'][epoch].add(int(duty.get('slot')))
 
         # Clean up old epochs
         for duty_type in ['proposer', 'attester']:
@@ -175,37 +173,36 @@ class BeaconClient:
         finalized_epoch = int(checkpoints['data']['finalized']['epoch'])
         justified_epoch = int(checkpoints['data']['current_justified']['epoch'])
         
-        async with aiohttp.ClientSession() as session:
-            tasks = []
-            for slot in range(start_slot, end_slot + 1):
-                url = f"{self.node_url}/eth/v1/beacon/blocks/{slot}"
-                tasks.append(self._check_slot(session, url, slot, current_slot))
-            
-            slots = await asyncio.gather(*tasks)
-            
-            # Update duties before returning slots
-            await self.update_duties(validator_indexes)
-            
-            # Convert duties to a format that can be JSON serialized
-            duties_json = {
-                'proposer': list(self.duties['proposer']),
-                'attester': list(self.duties['attester'])
-            }
-            
-            return {
-                'slots': slots,
-                'epoch_data': epoch_data,
-                'checkpoints': {
-                    'finalized': finalized_epoch,
-                    'justified': justified_epoch
-                },
-                'duties': duties_json
-            }
+        tasks = []
+        for slot in range(start_slot, end_slot + 1):
+            url = f"{self.node_url}/eth/v1/beacon/blocks/{slot}"
+            tasks.append(self._check_slot(self.session, url, slot, current_slot))
+        
+        slots = await asyncio.gather(*tasks)
+        
+        # Update duties before returning slots
+        await self.update_duties(validator_indexes)
+        
+        # Convert duties to a format that can be JSON serialized
+        duties_json = {
+            'proposer': list(self.duties['proposer']),
+            'attester': list(self.duties['attester'])
+        }
+        
+        return {
+            'slots': slots,
+            'epoch_data': epoch_data,
+            'checkpoints': {
+                'finalized': finalized_epoch,
+                'justified': justified_epoch
+            },
+            'duties': duties_json
+        }
 
     async def _check_slot(self, session, url: str, slot: int, current_slot: int):
         """Check slot status and return appropriate state"""
         # Clean cache on access
-        self._clean_block_cache(current_slot)
+        # self._clean_block_cache(current_slot)
         
         # Future slot
         if slot > current_slot:
@@ -294,23 +291,22 @@ class BeaconClient:
         self.cached_epochs.add(epoch)
 
     async def get_validator_status_summary(self, validator_indexes: List[str]) -> Dict:
-        async with aiohttp.ClientSession() as session:
-            tasks = []
-            for validator_index in validator_indexes:
-                url = f"{self.node_url}/eth/v1/beacon/states/head/validators/{validator_index}"
-                tasks.append(self._fetch_validator_data(session, url))
-            
-            results = await asyncio.gather(*tasks)
-            
-            active_count = sum(
-                1 for result in results 
-                if result.get('data', {}).get('status') == 'active_ongoing'
-            )
-            
-            return {
-                'total': len(validator_indexes),
-                'active': active_count
-            }
+        tasks = []
+        for validator_index in validator_indexes:
+            url = f"{self.node_url}/eth/v1/beacon/states/head/validators/{validator_index}"
+            tasks.append(self._fetch_validator_data(self.session, url))
+        
+        results = await asyncio.gather(*tasks)
+        
+        active_count = sum(
+            1 for result in results 
+            if result.get('data', {}).get('status') == 'active_ongoing'
+        )
+        
+        return {
+            'total': len(validator_indexes),
+            'active': active_count
+        }
 
     async def _fetch_validator_data(self, session, url: str):
         async with session.get(url) as response:
@@ -331,42 +327,44 @@ class BeaconClient:
         """Subscribe to head events from the beacon node"""
         while True:
             try:
-                async with aiohttp.ClientSession() as session:
-                    print(f"[{datetime.now().strftime('%H:%M:%S')}] Subscribing to head events")
-                    async with session.get(
-                        f"{self.node_url}/eth/v1/events?topics=head",
-                        headers={'Accept': 'text/event-stream'}
-                    ) as response:
-                        async for line in response.content:
-                            if line:
-                                try:
-                                    decoded = line.decode('utf-8').strip()
-                                    if decoded.startswith('event:'):
-                                        continue
-                                    if decoded.startswith('data:'):
-                                        data = json.loads(decoded[5:])
-                                        now = time.time()
-                                        slot = int(data.get('slot', 0))
-                                        
-                                        # Calculate arrival time (seconds since slot start)
-                                        slot_start = self.get_slot_start_time(slot)
-                                        arrival_time = now - slot_start
-                                        
-                                        # Store arrival time
-                                        self.block_arrival_times.append({
-                                            'slot': slot,
-                                            'arrival_time': arrival_time
-                                        })
-                                        
-                                        print(f"[{datetime.now().strftime('%H:%M:%S')}] Head event - Slot: {slot}, "
-                                              f"Block: {data.get('block')[:8]}..., Arrival: {arrival_time:.2f}s")
-                                        
-                                        await self._notify_listeners('head', {
-                                            **data,
-                                            'arrival_time': arrival_time
-                                        })
-                                except Exception as e:
-                                    print(f"Error processing event: {e}")
+                print(f"[{datetime.now().strftime('%H:%M:%S')}] Subscribing to head events")
+                async with self.session.get(
+                    f"{self.node_url}/eth/v1/events?topics=head",
+                    headers={'Accept': 'text/event-stream'}
+                ) as response:
+                    async for line in response.content:
+                        if line:
+                            try:
+                                decoded = line.decode('utf-8').strip()
+                                if decoded.startswith('event:'):
+                                    continue
+                                if decoded.startswith('data:'):
+                                    data = json.loads(decoded[5:])
+                                    now = time.time()
+                                    slot = int(data.get('slot', 0))
+                                    
+                                    # Calculate arrival time (seconds since slot start)
+                                    slot_start = self.get_slot_start_time(slot)
+                                    arrival_time = now - slot_start
+
+                                    # Fetch the block and throw in cache
+                                    self._check_slot(None, None, slot, self.calculate_current_slot())
+                                    
+                                    # Store arrival time
+                                    self.block_arrival_times.append({
+                                        'slot': slot,
+                                        'arrival_time': arrival_time
+                                    })
+                                    
+                                    print(f"[{datetime.now().strftime('%H:%M:%S')}] Head event - Slot: {slot}, "
+                                          f"Block: {data.get('block')[:8]}..., Arrival: {arrival_time:.2f}s")
+                                    
+                                    await self._notify_listeners('head', {
+                                        **data,
+                                        'arrival_time': arrival_time
+                                    })
+                            except Exception as e:
+                                print(f"Error processing event: {e}")
             except Exception as e:
                 print(f"SSE connection error: {e}")
                 await asyncio.sleep(5)  # Wait before reconnecting
@@ -583,13 +581,18 @@ class BeaconClient:
             start_slot = current_slot - (slots_per_epoch * 5)  # 5 epochs back
             
             async with httpx.AsyncClient() as client:
-                tasks = []
-                for slot in range(start_slot, current_slot + 1):
-                    tasks.append(self._fetch_and_cache_block(client, slot))
+                cached_count = 0
+                for slot in range(start_slot, current_slot + 1, 2):
+                    tasks = [
+                        self._fetch_and_cache_block(client, slot),
+                        self._fetch_and_cache_block(client, slot + 1) if slot + 1 <= current_slot else None
+                    ]
+                    tasks = [t for t in tasks if t is not None]
+                    
+                    results = await asyncio.gather(*tasks, return_exceptions=True)
+                    cached_count += sum(1 for r in results if r and not isinstance(r, Exception))
+                    await asyncio.sleep(0.05)  # Small delay between batches
                 
-                # Fetch blocks in parallel
-                results = await asyncio.gather(*tasks, return_exceptions=True)
-                cached_count = sum(1 for r in results if r and not isinstance(r, Exception))
                 logging.info(f"Prewarmed cache with {cached_count} blocks")
                 
         except Exception as e:
