@@ -4,40 +4,30 @@ import Overview from './views/overview/Overview';
 import Entities from './views/entities/Entities';
 import Proposer from './views/proposer/Proposer';
 import Execution from './views/execution/execution';
+import Admin from './views/admin/Admin';
 
-type View = 'overview' | 'entities' | 'proposer' | 'execution';
-
-function TimeBasedRouter() {
-  const [currentView, setCurrentView] = useState<View>('overview');
+function ViewRouter() {
+  const [currentView, setCurrentView] = useState<string>('overview');
   const location = useLocation();
 
   useEffect(() => {
-    // Only run if we're on the root path
     if (location.pathname !== '/') {
       return;
     }
 
-    const updateView = () => {
-      const now = new Date();
-      const dayOfWeek = now.getDay();
-      const hour = now.getHours();
-      const sixHourBlock = Math.floor(hour / 2);
-      
-      const views: View[] = [
-        'proposer', 
-        'overview', 
-        'execution'
-        // 'entities'
-      ];
-      const totalBlocks = views.length * 4;
-      const blockIndex = (dayOfWeek * 4 + sixHourBlock) % totalBlocks;
-      const viewIndex = Math.floor(blockIndex / 4);
-      
-      setCurrentView(views[viewIndex]);
+    const fetchCurrentView = async () => {
+      try {
+        const response = await fetch('/api/current-view');
+        const data = await response.json();
+        setCurrentView(data.view);
+      } catch (error) {
+        console.error('Failed to fetch current view:', error);
+        setCurrentView('overview');
+      }
     };
 
-    updateView();
-    const interval = setInterval(updateView, 1000 * 60); // Check every minute
+    fetchCurrentView();
+    const interval = setInterval(fetchCurrentView, 10000); // Poll every 10 seconds
     
     return () => clearInterval(interval);
   }, [location.pathname]);
@@ -51,10 +41,9 @@ function TimeBasedRouter() {
       return <Proposer />;
     case 'entities':
       return <Entities />;
-    case 'overview':
-      return <Overview />;
     case 'execution':
       return <Execution />;
+    case 'overview':
     default:
       return <Overview />;
   }
@@ -68,7 +57,8 @@ function App() {
         <Route path="/views/entities" element={<Entities />} />
         <Route path="/views/proposer" element={<Proposer />} />
         <Route path="/views/execution" element={<Execution />} />
-        <Route path="/" element={<TimeBasedRouter />} />
+        <Route path="/admin" element={<Admin />} />
+        <Route path="/" element={<ViewRouter />} />
       </Routes>
     </BrowserRouter>
   );

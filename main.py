@@ -2,7 +2,7 @@ import os
 import asyncio
 from beacon_client import BeaconClient
 from divoom_client import DivoomClient
-from fastapi import FastAPI, Response
+from fastapi import FastAPI, Response, Body
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 import httpx
@@ -19,6 +19,7 @@ from PIL import Image
 import io
 import tkinter as tk
 from PIL import Image, ImageTk
+from datetime import datetime, timedelta
 
 logging.basicConfig(
     level=logging.INFO,
@@ -37,6 +38,8 @@ HOST = os.getenv('HOST', '0.0.0.0')
 PORT = int(os.getenv('PORT', '8000'))
 MODE = os.getenv('MODE', 'production')
 REACT_DEV_SERVER = "http://localhost:5173" if MODE == 'development' else None
+VIEW_INTERVAL_MINUTES = int(os.getenv('VIEW_INTERVAL_MINUTES', '30'))
+ENABLED_VIEWS = os.getenv('ENABLED_VIEWS', 'proposer,overview,execution').split(',')
 
 # Validate configuration
 if not BEACON_NODE_URL:
@@ -45,6 +48,46 @@ if not VALIDATOR_INDEXES or VALIDATOR_INDEXES == ['']:
     raise ValueError("VALIDATOR_INDEXES environment variable is required")
 if not DIVOOM_API_ENDPOINT:
     raise ValueError("DIVOOM_API_ENDPOINT environment variable is required")
+
+class ViewRotation:
+    def __init__(self, enabled_views, interval_minutes):
+        self.enabled_views = enabled_views
+        self.interval_minutes = interval_minutes
+        self.last_view = None
+        self.last_change_time = datetime.now() - timedelta(minutes=interval_minutes)
+        self.override_view = None
+        self.override_until = None
+
+    def get_current_view(self):
+        now = datetime.now()
+        
+        # Check if there's an active override
+        if self.override_view and self.override_until:
+            if now < self.override_until:
+                return self.override_view
+            else:
+                # Clear expired override
+                self.override_view = None
+                self.override_until = None
+        
+        # Normal rotation logic
+        if (now - self.last_change_time).total_seconds() >= self.interval_minutes * 60:
+            available_views = [view for view in self.enabled_views if view != self.last_view]
+            if not available_views:
+                available_views = self.enabled_views
+            
+            import random
+            self.last_view = random.choice(available_views)
+            self.last_change_time = now
+            
+        return self.last_view
+
+    def set_override(self, view: str, duration_minutes: int):
+        if view not in self.enabled_views and view != "none":
+            raise ValueError(f"Invalid view: {view}")
+        
+        self.override_view = view if view != "none" else None
+        self.override_until = datetime.now() + timedelta(minutes=duration_minutes) if view != "none" else None
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
@@ -86,6 +129,7 @@ app.add_middleware(
 beacon_client = BeaconClient(BEACON_NODE_URL, VALIDATOR_INDEXES)
 divoom_client = DivoomClient(DIVOOM_API_ENDPOINT)
 validator_gadget = ValidatorGadget()
+view_rotation = ViewRotation(ENABLED_VIEWS, VIEW_INTERVAL_MINUTES)
 
 def download_validator_mapping():
     """Downloads the validator mapping file if it doesn't exist"""
@@ -291,6 +335,31 @@ async def get_gas():
     if not metrics:
         return {"error": "Failed to fetch gas metrics"}
     return metrics
+
+@app.get("/api/current-view")
+async def get_current_view():
+    return {"view": view_rotation.get_current_view()}
+
+@app.get("/api/views/available")
+async def get_available_views():
+    return {
+        "views": ENABLED_VIEWS,
+        "currentOverride": {
+            "view": view_rotation.override_view,
+            "until": view_rotation.override_until.isoformat() if view_rotation.override_until else None
+        }
+    }
+
+@app.post("/api/views/override")
+async def set_view_override(
+    view: str = Body(..., embed=True),
+    duration_minutes: int = Body(..., embed=True)
+):
+    try:
+        view_rotation.set_override(view, duration_minutes)
+        return {"status": "success"}
+    except ValueError as e:
+        return {"status": "error", "message": str(e)}
 
 # In development mode, proxy non-API requests to React dev server
 if MODE == 'development':
