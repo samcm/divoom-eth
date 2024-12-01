@@ -3,8 +3,9 @@ import { BrowserRouter, Routes, Route, Navigate, useLocation } from 'react-route
 import Overview from './views/overview/Overview';
 import Entities from './views/entities/Entities';
 import Proposer from './views/proposer/Proposer';
+import Execution from './views/execution/execution';
 
-type View = 'overview' | 'entities' | 'proposer';
+type View = 'overview' | 'entities' | 'proposer' | 'execution';
 
 function TimeBasedRouter() {
   const [currentView, setCurrentView] = useState<View>('overview');
@@ -25,6 +26,7 @@ function TimeBasedRouter() {
       const views: View[] = [
         'proposer', 
         'overview', 
+        'execution'
         // 'entities'
       ];
       const totalBlocks = views.length * 4;
@@ -51,6 +53,8 @@ function TimeBasedRouter() {
       return <Entities />;
     case 'overview':
       return <Overview />;
+    case 'execution':
+      return <Execution />;
     default:
       return <Overview />;
   }
@@ -63,6 +67,7 @@ function App() {
         <Route path="/views/overview" element={<Overview />} />
         <Route path="/views/entities" element={<Entities />} />
         <Route path="/views/proposer" element={<Proposer />} />
+        <Route path="/views/execution" element={<Execution />} />
         <Route path="/" element={<TimeBasedRouter />} />
       </Routes>
     </BrowserRouter>

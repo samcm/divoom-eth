@@ -6,6 +6,7 @@ import json
 from datetime import datetime
 from collections import deque
 import logging
+import httpx
 
 class BeaconClient:
     def __init__(self, node_url: str, validator_indexes: List[str]):
@@ -30,14 +31,19 @@ class BeaconClient:
             'proposer': [],
             'attester': []
         }
-        # Simple block cache
-        self.block_cache: Dict[int, str] = {}  # slot -> status
+        # Update block cache type hint and structure
+        self.block_cache: Dict[int, Dict] = {}  # slot -> {status: str, data?: Dict}
+        self.rewards_cache = {}  # epoch -> rewards data
+        self.max_cached_epochs = 10  # Keep last 10 epochs in memory
 
     async def initialize(self):
         """Fetch config and genesis data on startup"""
         self.config = await self._fetch_config()
         self.genesis = await self._fetch_genesis()
         print(f"Slots per epoch: {self.config['data']['SLOTS_PER_EPOCH']}")
+        
+        # Prewarm the block cache
+        await self._prewarm_block_cache()
 
     async def _fetch_config(self):
         async with aiohttp.ClientSession() as session:
@@ -212,14 +218,16 @@ class BeaconClient:
         if slot in self.block_cache:
             return {
                 "slot": slot,
-                "status": self.block_cache[slot]
+                "status": self.block_cache[slot]["status"]
             }
         
         # Current slot
         if slot == current_slot:
             try:
                 async with session.get(url) as response:
-                    if response.status == 200:
+                    if response.status_code == 200:
+                        data = await response.json()
+                        self.block_cache[slot] = {"status": "proposed", "data": data["data"]}
                         return {"slot": slot, "status": "proposed"}
                     return {"slot": slot, "status": "pending"}
             except:
@@ -228,23 +236,27 @@ class BeaconClient:
         # Past slot
         try:
             async with session.get(url) as response:
-                if response.status == 404:
+                if response.status_code == 404:
                     # More than 2 slots old and missing
                     if current_slot - slot > 2:
                         status = "missing"
                     else:
                         # Recent missing slot
                         status = "pending"
-                elif response.status == 200:
+                    self.block_cache[slot] = {"status": status}
+                elif response.status_code == 200:
+                    data = await response.json()
                     status = "proposed"
-                    # Cache only if block was found and is old enough
-                    if current_slot - slot > 16:
-                        self.block_cache[slot] = status
+                    # Cache block data if found
+                    self.block_cache[slot] = {"status": status, "data": data["data"]}
                 else:
                     status = "missing"
+                    self.block_cache[slot] = {"status": status}
                 return {"slot": slot, "status": status}
         except:
-            return {"slot": slot, "status": "missing"}
+            status = "missing"
+            self.block_cache[slot] = {"status": status}
+            return {"slot": slot, "status": status}
 
     def _clean_block_cache(self, current_slot: int):
         """Remove old slots from cache (older than 8 epochs)"""
@@ -458,3 +470,142 @@ class BeaconClient:
             import traceback
             traceback.print_exc()
             return []
+
+    async def get_epoch_rewards(self, epoch: int):
+        """Fetch and cache rewards for validators in specified epoch"""
+        if epoch in self.rewards_cache:
+            return self.rewards_cache[epoch]
+            
+        rewards = []
+        try:
+            async with httpx.AsyncClient() as client:
+                # Send validator indexes in request body
+                response = await client.post(
+                    f"{self.node_url}/eth/v1/beacon/rewards/attestations/{epoch}",
+                    json=self.validator_indexes
+                )
+                response.raise_for_status()
+                rewards = response.json()["data"]
+                    
+            # Cache results
+            self.rewards_cache[epoch] = rewards
+            
+            # Cleanup old epochs
+            if len(self.rewards_cache) > self.max_cached_epochs:
+                oldest_epoch = min(self.rewards_cache.keys())
+                del self.rewards_cache[oldest_epoch]
+                
+            return rewards
+            
+        except Exception as e:
+            logging.error(f"Error fetching rewards for epoch {epoch}: {e}")
+            return None
+
+    async def get_gas_metrics(self):
+        """Fetch gas metrics from recent blocks"""
+        try:
+            async with httpx.AsyncClient() as client:
+                # Get latest block
+                response = await client.get(f"{self.node_url}/eth/v2/beacon/blocks/head")
+                response.raise_for_status()
+                latest_block = response.json()["data"]
+                current_slot = int(latest_block["message"]["slot"])
+                
+                # Get execution payload from latest block
+                execution_payload = latest_block["message"]["body"]["execution_payload"]
+                latest_base_fee = int(execution_payload["base_fee_per_gas"]) / 1e9
+                latest_gas_used = int(execution_payload["gas_used"])
+                latest_gas_limit = int(execution_payload["gas_limit"])
+                latest_tx_count = len(execution_payload["transactions"])
+                
+                # Try to decode extra data
+                try:
+                    extra_data = bytes.fromhex(execution_payload["extra_data"][2:]).decode('utf-8').strip()
+                except:
+                    extra_data = None
+                
+                # Get transaction count from last 15 blocks
+                total_tx_count = latest_tx_count
+                blocks_counted = 1
+                
+                for slot in range(current_slot - 14, current_slot):
+                    # Skip future slots
+                    if slot >= current_slot:
+                        continue
+                    
+                    # Check cache first
+                    cached = self.block_cache.get(slot)
+                    if cached and cached["status"] == "proposed" and "data" in cached:
+                        try:
+                            execution_payload = cached["data"]["message"]["body"]["execution_payload"]
+                            total_tx_count += len(execution_payload["transactions"])
+                            blocks_counted += 1
+                            continue
+                        except:
+                            pass
+                    
+                    # Fetch if not in cache or cache miss
+                    try:
+                        response = await client.get(f"{self.node_url}/eth/v2/beacon/blocks/{slot}")
+                        if response.status_code == 200:
+                            block_data = response.json()["data"]
+                            execution_payload = block_data["message"]["body"]["execution_payload"]
+                            total_tx_count += len(execution_payload["transactions"])
+                            blocks_counted += 1
+                            # Update cache with full block data
+                            self.block_cache[slot] = {"status": "proposed", "data": block_data}
+                    except:
+                        continue
+                
+                return {
+                    "latest": {
+                        "base_fee": round(latest_base_fee, 2),
+                        "gas_used": latest_gas_used,
+                        "gas_limit": latest_gas_limit,
+                        "utilization": round((latest_gas_used / latest_gas_limit) * 100, 1),
+                        "tx_count": latest_tx_count,
+                        "extra_data": extra_data if extra_data else None
+                    },
+                    "total_tx": total_tx_count,
+                    "blocks_counted": blocks_counted
+                }
+                
+        except Exception as e:
+            logging.error(f"Error fetching gas metrics: {e}")
+            return None
+
+    async def _prewarm_block_cache(self):
+        """Fetch recent blocks to prewarm the cache"""
+        try:
+            logging.info("Prewarming block cache...")
+            slots_per_epoch = int(self.config['data']['SLOTS_PER_EPOCH'])
+            current_slot = self.calculate_current_slot()
+            start_slot = current_slot - (slots_per_epoch * 5)  # 5 epochs back
+            
+            async with httpx.AsyncClient() as client:
+                tasks = []
+                for slot in range(start_slot, current_slot + 1):
+                    tasks.append(self._fetch_and_cache_block(client, slot))
+                
+                # Fetch blocks in parallel
+                results = await asyncio.gather(*tasks, return_exceptions=True)
+                cached_count = sum(1 for r in results if r and not isinstance(r, Exception))
+                logging.info(f"Prewarmed cache with {cached_count} blocks")
+                
+        except Exception as e:
+            logging.error(f"Error prewarming block cache: {e}")
+
+    async def _fetch_and_cache_block(self, client, slot: int):
+        """Fetch a single block and add it to cache"""
+        try:
+            response = await client.get(f"{self.node_url}/eth/v2/beacon/blocks/{slot}")
+            if response.status_code == 200:
+                block_data = response.json()["data"]
+                self.block_cache[slot] = {"status": "proposed", "data": block_data}
+                return True
+            elif response.status_code == 404:
+                self.block_cache[slot] = {"status": "missing"}
+                return False
+        except Exception as e:
+            logging.error(f"Error fetching block {slot}: {e}")
+            return False

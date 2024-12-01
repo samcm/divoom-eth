@@ -240,6 +240,58 @@ async def get_proposers():
         traceback.print_exc()
         return []
 
+@app.get("/api/rewards/{epoch}")
+async def get_rewards(epoch: int):
+    """Get rewards for all validators in specified epoch"""
+    rewards = await beacon_client.get_epoch_rewards(epoch)
+    if not rewards:
+        return {"error": "Failed to fetch rewards"}
+        
+    # Calculate total rewards
+    totals = {
+        "head": 0,
+        "target": 0,
+        "source": 0,
+        "inclusion_delay": 0,
+        "inactivity": 0,
+        "total_attestations": 0
+    }
+    
+    for reward in rewards:
+        if reward["attestation_included"]:
+            totals["total_attestations"] += 1
+            totals["head"] += 1 if reward["head"] > 0 else 0
+            totals["target"] += 1 if reward["target"] > 0 else 0
+            totals["source"] += 1 if reward["source"] > 0 else 0
+            totals["inclusion_delay"] += 1 if reward["inclusion_delay"] > 0 else 0
+            totals["inactivity"] += 1 if reward["inactivity"] < 0 else 0
+    
+    # Calculate percentages
+    if totals["total_attestations"] > 0:
+        return {
+            "head": round((totals["head"] / totals["total_attestations"]) * 100, 1),
+            "target": round((totals["target"] / totals["total_attestations"]) * 100, 1),
+            "source": round((totals["source"] / totals["total_attestations"]) * 100, 1),
+            "inclusion_delay": round((totals["inclusion_delay"] / totals["total_attestations"]) * 100, 1),
+            "inactivity": round((totals["inactivity"] / totals["total_attestations"]) * 100, 1)
+        }
+    else:
+        return {
+            "head": 0,
+            "target": 0, 
+            "source": 0,
+            "inclusion_delay": 0,
+            "inactivity": 0
+        }
+
+@app.get("/api/gas")
+async def get_gas():
+    """Get current gas metrics"""
+    metrics = await beacon_client.get_gas_metrics()
+    if not metrics:
+        return {"error": "Failed to fetch gas metrics"}
+    return metrics
+
 # In development mode, proxy non-API requests to React dev server
 if MODE == 'development':
     @app.get("/{full_path:path}")
