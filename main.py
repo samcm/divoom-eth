@@ -446,12 +446,30 @@ async def proxy_to_react(full_path: str):
         try:
             with open(f"{REACT_APP_PATH}/{full_path}", "rb") as f:
                 content = f.read()
-            return Response(content=content, media_type="text/html")
+                
+            # Set correct MIME types
+            if full_path.endswith('.js'):
+                return Response(content=content, media_type='application/javascript')
+            elif full_path.endswith('.mjs'):
+                return Response(content=content, media_type='application/javascript')
+            elif full_path.endswith('.css'):
+                return Response(content=content, media_type='text/css')
+            elif full_path.endswith('.html'):
+                return Response(content=content, media_type='text/html')
+            elif full_path.endswith(('.woff2', '.woff')):
+                return Response(content=content, media_type='font/woff2' if full_path.endswith('.woff2') else 'font/woff')
+            elif full_path.endswith('.ttf'):
+                return Response(content=content, media_type='font/ttf')
+            elif full_path.endswith('.otf'):
+                return Response(content=content, media_type='font/otf')
+            else:
+                return Response(content=content)
+                
         except:
             # Fallback to index.html for client-side routing
             with open(f"{REACT_APP_PATH}/index.html", "rb") as f:
                 content = f.read()
-            return Response(content=content, media_type="text/html")
+            return Response(content=content, media_type='text/html')
 
 async def load_historical_blocks():
     """Lazily load the last 5 epochs of blocks"""
