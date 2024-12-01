@@ -116,6 +116,7 @@ async def lifespan(app: FastAPI):
     # Start background tasks
     asyncio.create_task(beacon_client.subscribe_to_head_events())
     asyncio.create_task(beacon_client.start_slot_timer())
+    asyncio.create_task(load_historical_blocks())
     print("Started SSE subscription and slot timer")
     
     # Start L2 tracker
@@ -229,7 +230,12 @@ async def capture_react_page():
         return screenshot
 
 async def handle_head_event(event_data: Dict):
-    """Handle new head events by updating the Divoom display"""
+    """Handle new head events by updating the display and cache"""
+    slot = int(event_data.get('slot', 0))
+    
+    # Fetch and cache the new block
+    asyncio.create_task(beacon_client.get_block(slot))
+    
     if view_rotation.get_current_view() == "overview" or \
        view_rotation.get_current_view() == "execution" or \
        view_rotation.get_current_view() == "proposer":
@@ -436,6 +442,21 @@ else:
     if not os.path.exists(REACT_APP_PATH):
         raise RuntimeError(f"Production mode requires the '{REACT_APP_PATH}' directory. Run 'npm run build' in the ui directory first.")
     app.mount("/", StaticFiles(directory=REACT_APP_PATH, html=True), name="static")
+
+async def load_historical_blocks():
+    """Lazily load the last 5 epochs of blocks"""
+    try:
+        current_slot = beacon_client.calculate_current_slot()
+        slots_per_epoch = int(beacon_client.config['data']['SLOTS_PER_EPOCH'])
+        start_slot = current_slot - (slots_per_epoch * 5)
+        
+        for slot in range(start_slot, current_slot + 1):
+            # Don't wait for the result - let it load in background
+            asyncio.create_task(beacon_client.get_block(slot))
+            await asyncio.sleep(0.05)  # Small delay to prevent overwhelming the node
+            
+    except Exception as e:
+        logging.error(f"Error loading historical blocks: {e}")
 
 if __name__ == "__main__":
     print(f"Running in {MODE} mode")

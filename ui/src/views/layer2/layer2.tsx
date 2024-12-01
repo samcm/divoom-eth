@@ -90,6 +90,7 @@ export default function L2Metrics() {
           whiteSpace: 'pre',
           width: '60px',
           display: 'flex',
+          marginTop: '3px',
           justifyContent: 'space-between'
         }}>
           <span>TOTAL</span>

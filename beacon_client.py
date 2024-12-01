@@ -32,7 +32,7 @@ class BeaconClient:
             'attester': []
         }
         # Update block cache type hint and structure
-        self.block_cache: Dict[int, Dict] = {}  # slot -> {status: str, data?: Dict}
+        self.block_cache: Dict[int, Dict] = {}  # slot -> block data
         self.rewards_cache = {}  # epoch -> rewards data
         self.max_cached_epochs = 10  # Keep last 10 epochs in memory
         self.session = None
@@ -45,7 +45,7 @@ class BeaconClient:
         print(f"Slots per epoch: {self.config['data']['SLOTS_PER_EPOCH']}")
         
         # Prewarm the block cache
-        await self._prewarm_block_cache()
+        self._prewarm_block_cache()
 
     async def _fetch_config(self):
         async with self.session.get(f"{self.node_url}/eth/v1/config/spec") as response:
@@ -105,7 +105,7 @@ class BeaconClient:
                 logging.info(f"Need to fetch duties for epoch {epoch}")
 
         if not epochs_to_fetch:
-            logging.info(f"Using cached duties for epochs {current_epoch} and {current_epoch + 1}")
+            logging.debug(f"Using cached duties for epochs {current_epoch} and {current_epoch + 1}")
             # Update combined duties from cache
             self.duties = {
                 'proposer': [],
@@ -156,8 +156,33 @@ class BeaconClient:
 
         logging.info(f"Duties cache after update: {self.duties_cache['proposer']}")
 
+    async def get_block(self, slot: int) -> Optional[Dict]:
+        """Get block data for a slot, using cache if available"""
+        # Return from cache if exists
+        if slot in self.block_cache:
+            return self.block_cache[slot]
+            
+        try:
+            async with self.session.get(f"{self.node_url}/eth/v2/beacon/blocks/{slot}") as response:
+                if response.status == 200:
+                    block_data = await response.json()
+                    self.block_cache[slot] = {
+                        "status": "proposed",
+                        "data": block_data["data"]
+                    }
+                    return self.block_cache[slot]
+                elif response.status == 404:
+                    self.block_cache[slot] = {"status": "missing"}
+                    return self.block_cache[slot]
+                else:
+                    logging.error(f"Unexpected status {response.status} fetching block {slot}")
+                    return None
+        except Exception as e:
+            logging.error(f"Error fetching block {slot}: {e}")
+            return None
+
     async def get_slots(self, validator_indexes: List[str]):
-        """Get slots from last 6 epochs and next epoch"""
+        """Get slots from last 5 epochs and next epoch"""
         epoch_data = self.get_epoch_data()
         slots_per_epoch = int(self.config['data']['SLOTS_PER_EPOCH'])
         current_slot = epoch_data['current_slot']
@@ -173,12 +198,26 @@ class BeaconClient:
         finalized_epoch = int(checkpoints['data']['finalized']['epoch'])
         justified_epoch = int(checkpoints['data']['current_justified']['epoch'])
         
-        tasks = []
+        slots = []
         for slot in range(start_slot, end_slot + 1):
-            url = f"{self.node_url}/eth/v1/beacon/blocks/{slot}"
-            tasks.append(self._check_slot(self.session, url, slot, current_slot))
-        
-        slots = await asyncio.gather(*tasks)
+            if slot > current_slot:
+                slots.append({
+                    "slot": slot,
+                    "status": "upcoming"
+                })
+                continue
+                
+            block = await self.get_block(slot)
+            if block:
+                slots.append({
+                    "slot": slot,
+                    "status": "proposed"
+                })
+            else:
+                slots.append({
+                    "slot": slot,
+                    "status": "missing"
+                })
         
         # Update duties before returning slots
         await self.update_duties(validator_indexes)
@@ -198,97 +237,6 @@ class BeaconClient:
             },
             'duties': duties_json
         }
-
-    async def _check_slot(self, session, url: str, slot: int, current_slot: int):
-        """Check slot status and return appropriate state"""
-        # Clean cache on access
-        # self._clean_block_cache(current_slot)
-        
-        # Future slot
-        if slot > current_slot:
-            return {
-                "slot": slot,
-                "status": "upcoming"
-            }
-        
-        # Check cache first
-        if slot in self.block_cache:
-            return {
-                "slot": slot,
-                "status": self.block_cache[slot]["status"]
-            }
-        
-        # Current slot
-        if slot == current_slot:
-            try:
-                async with session.get(url) as response:
-                    if response.status_code == 200:
-                        data = await response.json()
-                        self.block_cache[slot] = {"status": "proposed", "data": data["data"]}
-                        return {"slot": slot, "status": "proposed"}
-                    return {"slot": slot, "status": "pending"}
-            except:
-                return {"slot": slot, "status": "pending"}
-        
-        # Past slot
-        try:
-            async with session.get(url) as response:
-                if response.status_code == 404:
-                    # More than 2 slots old and missing
-                    if current_slot - slot > 2:
-                        status = "missing"
-                    else:
-                        # Recent missing slot
-                        status = "pending"
-                    self.block_cache[slot] = {"status": status}
-                elif response.status_code == 200:
-                    data = await response.json()
-                    status = "proposed"
-                    # Cache block data if found
-                    self.block_cache[slot] = {"status": status, "data": data["data"]}
-                else:
-                    status = "missing"
-                    self.block_cache[slot] = {"status": status}
-                return {"slot": slot, "status": status}
-        except:
-            status = "missing"
-            self.block_cache[slot] = {"status": status}
-            return {"slot": slot, "status": status}
-
-    def _clean_block_cache(self, current_slot: int):
-        """Remove old slots from cache (older than 8 epochs)"""
-        slots_per_epoch = int(self.config['data']['SLOTS_PER_EPOCH'])
-        max_age = slots_per_epoch * 8
-        oldest_allowed = current_slot - max_age
-        
-        # Remove old entries
-        self.block_cache = {
-            slot: status 
-            for slot, status in self.block_cache.items() 
-            if slot > oldest_allowed
-        }
-
-    async def _cache_epoch(self, session, epoch: int, current_slot: int):
-        """Cache all slots for a given epoch"""
-        if epoch in self.cached_epochs:
-            return
-
-        slots_per_epoch = int(self.config['data']['SLOTS_PER_EPOCH'])
-        start_slot = epoch * slots_per_epoch
-        end_slot = start_slot + slots_per_epoch
-
-        tasks = []
-        for slot in range(start_slot, end_slot):
-            if slot not in self.block_cache and slot <= current_slot:
-                url = f"{self.node_url}/eth/v1/beacon/blocks/{slot}"
-                tasks.append(self._check_slot(session, url, slot, current_slot))
-
-        if tasks:
-            results = await asyncio.gather(*tasks)
-            for result in results:
-                self.block_cache[result['slot']] = result['status']
-
-        self.cached_epochs.add(epoch)
 
     async def get_validator_status_summary(self, validator_indexes: List[str]) -> Dict:
         tasks = []
@@ -342,13 +290,15 @@ class BeaconClient:
                                     data = json.loads(decoded[5:])
                                     now = time.time()
                                     slot = int(data.get('slot', 0))
+
+                                    logging.info(f"Head event - Slot: {slot}")
                                     
                                     # Calculate arrival time (seconds since slot start)
                                     slot_start = self.get_slot_start_time(slot)
                                     arrival_time = now - slot_start
 
                                     # Fetch the block and throw in cache
-                                    self._check_slot(None, None, slot, self.calculate_current_slot())
+                                    self.get_block(slot)
                                     
                                     # Store arrival time
                                     self.block_arrival_times.append({
