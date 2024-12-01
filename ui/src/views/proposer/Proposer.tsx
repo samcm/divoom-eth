@@ -85,7 +85,7 @@ function Proposer() {
             whiteSpace: 'pre',
             marginBottom: '4px',
           }}>
-            SLOT: {Math.floor(currentProposer.slot % 32)}
+            SLOT: {Math.floor(currentProposer.slot % 32)+1}
           </div>
           <div style={{
             color: '#888888',
