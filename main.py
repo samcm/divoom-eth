@@ -96,6 +96,101 @@ class ViewRotation:
 
 # Add to the global variables
 l2_tracker = L2MetricsTracker()
+screenshot_cache = None
+browser_lock = asyncio.Lock()
+playwright = None
+browser = None
+context = None
+page = None
+
+async def initialize_browser():
+    global playwright, browser, context, page
+    
+    try:
+        playwright = await async_playwright().start()
+        browser = await playwright.chromium.launch(
+            args=['--no-sandbox', '--disable-dev-shm-usage']
+        )
+        
+        context = await browser.new_context(
+            viewport={'width': 64, 'height': 64},
+            device_scale_factor=1,
+        )
+        
+        page = await context.new_page()
+        
+        # Anti-aliasing prevention
+        await page.add_init_script("""
+            document.addEventListener('DOMContentLoaded', () => {
+                const style = document.createElement('style');
+                style.textContent = `
+                    * {
+                        image-rendering: pixelated !important;
+                        -webkit-font-smoothing: none !important;
+                        -moz-osx-font-smoothing: none !important;
+                        font-smoothing: none !important;
+                        text-rendering: optimizeSpeed !important;
+                        transform: translate3d(0, 0, 0);
+                        backface-visibility: hidden;
+                    }
+                `;
+                document.head.appendChild(style);
+            });
+        """)
+        
+    except Exception as e:
+        logging.error(f"Failed to initialize browser: {e}")
+        await cleanup_browser()
+        raise
+
+async def cleanup_browser():
+    global playwright, browser, context, page
+    
+    if page:
+        await page.close()
+    if context:
+        await context.close()
+    if browser:
+        await browser.close()
+    if playwright:
+        await playwright.stop()
+        
+    page = None
+    context = None
+    browser = None
+    playwright = None
+
+async def update_screenshot_cache():
+    global screenshot_cache, page
+    
+    while True:
+        try:
+            if not page:
+                await initialize_browser()
+                
+            url = f"http://localhost:{PORT}"
+            await page.goto(url)
+            await page.wait_for_timeout(500)
+            
+            async with browser_lock:
+                screenshot_cache = await page.screenshot(
+                    type='png',
+                    omit_background=False,
+                    scale='css',
+                    animations='disabled',
+                )
+            
+            await asyncio.sleep(1)
+            
+        except Exception as e:
+            logging.error(f"Screenshot error: {e}")
+            await cleanup_browser()
+            await asyncio.sleep(1)  # Wait before retrying
+
+# Replace capture_react_page with this simpler version
+async def capture_react_page():
+    async with browser_lock:
+        return screenshot_cache
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
@@ -125,12 +220,14 @@ async def lifespan(app: FastAPI):
     # Start L2 display update task
     asyncio.create_task(update_l2_display())
     
+    # Start screenshot cache update task
+    asyncio.create_task(update_screenshot_cache())
+    
     yield  # Server is running
     
-    # Cleanup (if needed)
+    # Cleanup
     print("Shutting down...")
-    
-    # Stop L2 tracker
+    await cleanup_browser()
     await l2_tracker.stop()
 
 app = FastAPI(lifespan=lifespan)
@@ -154,7 +251,8 @@ async def update_l2_display():
         if view_rotation.get_current_view() == "layer2":
             try:
                 screenshot = await capture_react_page()
-                await divoom_client.update_display(screenshot)
+                if screenshot:  # Only update if we have a cached screenshot
+                    await divoom_client.update_display(screenshot)
             except Exception as e:
                 print(f"Error updating L2 display: {e}")
         await asyncio.sleep(0.5)
@@ -184,51 +282,6 @@ def download_validator_mapping():
             
     logging.info("Validator mapping download complete")
 
-async def capture_react_page():
-    async with async_playwright() as p:
-        browser = await p.chromium.launch()
-        
-        context = await browser.new_context(
-            viewport={'width': 64, 'height': 64},
-            device_scale_factor=1,
-        )
-        
-        page = await context.new_page()
-        
-        # Enhanced anti-aliasing prevention
-        await page.add_init_script("""
-            document.addEventListener('DOMContentLoaded', () => {
-                const style = document.createElement('style');
-                style.textContent = `
-                    * {
-                        image-rendering: pixelated !important;
-                        -webkit-font-smoothing: none !important;
-                        -moz-osx-font-smoothing: none !important;
-                        font-smoothing: none !important;
-                        text-rendering: optimizeSpeed !important;
-                        transform: translate3d(0, 0, 0);
-                        backface-visibility: hidden;
-                    }
-                `;
-                document.head.appendChild(style);
-            });
-        """)
-        
-        url = f"http://localhost:{PORT}"
-        await page.goto(url)
-        await page.wait_for_timeout(2000)
-        
-        screenshot = await page.screenshot(
-            type='png',
-            omit_background=False,
-            scale='css',
-            animations='disabled',
-        )
-        
-        await browser.close()
-            
-        return screenshot
-
 async def handle_head_event(event_data: Dict):
     """Handle new head events by updating the display and cache"""
     slot = int(event_data.get('slot', 0))
@@ -236,13 +289,11 @@ async def handle_head_event(event_data: Dict):
     # Fetch and cache the new block
     asyncio.create_task(beacon_client.get_block(slot))
     
-    if view_rotation.get_current_view() == "overview" or \
-       view_rotation.get_current_view() == "execution" or \
-       view_rotation.get_current_view() == "proposer":
-        print(f"Re-rendering display for head event")
+    if view_rotation.get_current_view() in ["overview", "execution", "proposer"]:
         try:
             screenshot = await capture_react_page()
-            await divoom_client.update_display(screenshot)
+            if screenshot:
+                await divoom_client.update_display(screenshot)
         except Exception as e:
             print(f"Error updating display on head event: {e}")
 
@@ -274,12 +325,17 @@ async def get_arrival_times():
 async def get_image():
     try:
         screenshot = await capture_react_page()
+        if not screenshot:
+            return Response(
+                content="Screenshot not available",
+                status_code=503
+            )
         return Response(
             content=screenshot,
             media_type="image/png"
         )
     except Exception as e:
-        print(f"Error capturing screenshot: {e}")
+        print(f"Error getting screenshot: {e}")
         return Response(
             content=str(e),
             status_code=500
