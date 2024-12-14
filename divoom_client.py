@@ -2,12 +2,18 @@ import aiohttp
 from typing import Dict
 from PIL import Image
 import io
+import time
 
 class DivoomClient:
     def __init__(self, api_endpoint: str):
         self.api_endpoint = api_endpoint
+        self.last_update = 0
 
     async def update_display(self, image_data: bytes, x: int = 0, y: int = 0, push_immediately: bool = True):
+        now = time.time()
+        if now - self.last_update < 15:
+            return
+            
         # Convert bytes to PIL Image
         image = Image.open(io.BytesIO(image_data))
         
@@ -32,3 +38,4 @@ class DivoomClient:
             async with session.post(f"{self.api_endpoint}/image", data=form_data) as response:
                 if response.status != 200:
                     raise Exception(f"Failed to update Divoom display: {await response.text()}")
+                self.last_update = now
