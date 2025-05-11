@@ -71,50 +71,107 @@ function SlotView() {
       const eth = Number(valueInWei) / 1e18;
       
       if (eth < 0.01) {
-        return `${eth.toFixed(4)} ETH`;
+        return `${eth.toFixed(4)}Ξ`;
       } else {
-        return `${eth.toFixed(2)} ETH`;
+        return `${eth.toFixed(2)}Ξ`;
       }
     } catch (error) {
       return value;
     }
   };
 
-  const renderPixel = (x: number, y: number, color: string) => {
-    return (
-      <div
-        key={`${x}-${y}`}
-        style={{
-          position: 'absolute',
-          left: `${x}px`,
-          top: `${y}px`,
-          width: '1px',
-          height: '1px',
-          backgroundColor: color,
-        }}
-      />
-    );
+  // Create the background grid layout
+  const renderGrid = () => {
+    const cells = [];
+    
+    // Add horizontal lines
+    for (let y = 16; y < 64; y += 16) {
+      for (let x = 0; x < 64; x++) {
+        cells.push(
+          <div
+            key={`h-${y}-${x}`}
+            style={{
+              position: 'absolute',
+              left: `${x}px`,
+              top: `${y}px`,
+              width: '1px',
+              height: '1px',
+              backgroundColor: '#222222',
+            }}
+          />
+        );
+      }
+    }
+    
+    // Add vertical lines
+    for (let x = 0; x < 64; x += 16) {
+      for (let y = 0; y < 64; y++) {
+        cells.push(
+          <div
+            key={`v-${x}-${y}`}
+            style={{
+              position: 'absolute',
+              left: `${x}px`,
+              top: `${y}px`,
+              width: '1px',
+              height: '1px',
+              backgroundColor: '#222222',
+            }}
+          />
+        );
+      }
+    }
+    
+    return cells;
   };
 
-  const renderArrivalTimeBar = (time?: number) => {
+  // Render the arrival time bar
+  const renderArrivalBar = (time?: number) => {
     if (!time) return null;
     
-    // Scale 0-2000ms to 0-50px
     const MAX_TIME = 2000;
-    const normalizedValue = Math.min(50, Math.floor((time / MAX_TIME) * 50));
+    const barWidth = Math.min(60, Math.floor((time / MAX_TIME) * 60));
+    const barY = 58;
     
     const pixels = [];
     
-    // Background bar
-    for (let i = 0; i < 50; i++) {
-      pixels.push(renderPixel(i + 10, 45, '#222222'));
+    // Bar background
+    for (let i = 2; i <= 62; i++) {
+      pixels.push(
+        <div 
+          key={`bar-bg-${i}`}
+          style={{
+            position: 'absolute',
+            left: `${i}px`,
+            top: `${barY}px`,
+            width: '1px',
+            height: '3px',
+            backgroundColor: '#222222'
+          }}
+        />
+      );
     }
     
-    // Time bar with color based on speed
-    for (let i = 0; i < normalizedValue; i++) {
-      // Gradient from green to red based on time
-      const hue = Math.floor(120 - (i / 50) * 120);
-      pixels.push(renderPixel(i + 10, 45, `hsl(${hue}, 100%, 50%)`));
+    // Bar fill - color gradient based on speed
+    for (let i = 2; i < 2 + barWidth; i++) {
+      // Calculate a gradient from green to red
+      const progress = (i - 2) / 60;
+      // Use HSL where hue 120 is green, 60 is yellow, 0 is red
+      const hue = 120 - (progress * 120);
+      
+      pixels.push(
+        <div 
+          key={`bar-fill-${i}`}
+          style={{
+            position: 'absolute',
+            left: `${i}px`,
+            top: `${barY}px`,
+            width: '1px',
+            height: '3px',
+            backgroundColor: `hsl(${hue}, 100%, 50%)`
+          }}
+        />
+      );
     }
     
     return pixels;
@@ -124,54 +181,81 @@ function SlotView() {
     <BaseLayout title="SLOT">
       {slotData && !slotData.error ? (
         <>
+          {/* Background grid */}
+          {renderGrid()}
+          
+          {/* Slot number - dominant element */}
           <div style={{
             position: 'absolute',
-            top: '15px',
-            left: '5px',
-            display: 'flex',
-            flexDirection: 'column',
-            gap: '1px',
-            lineHeight: '12px',
-            fontSize: '8px',
+            top: '18px',
+            left: '2px',
+            right: '2px',
+            textAlign: 'center',
+            fontSize: '12px',
             fontFamily: '"Pixelify Sans", monospace',
-            whiteSpace: 'pre',
-            color: '#00ff00'
+            color: '#00ff00',
+            fontWeight: 'bold',
           }}>
-            {/* Slot number */}
-            <div>
-              #{slotData.slot}
-            </div>
-            
-            {/* Proposer entity */}
-            <div>
-              {slotData.entity || 'unknown'}
-            </div>
-            
-            {/* Bid value */}
-            {slotData.winning_bid && (
-              <div>
-                {formatEthValue(slotData.winning_bid.value)}
-              </div>
-            )}
-            
-            {/* Arrival time */}
-            <div>
-              {getArrivalTime(slotData.arrival_times?.min_arrival_time)}
-            </div>
+            {slotData.slot}
           </div>
           
-          {/* Arrival time bar visualization */}
-          {renderArrivalTimeBar(slotData.arrival_times?.min_arrival_time)}
+          {/* Entity - second most important */}
+          <div style={{
+            position: 'absolute',
+            top: '30px',
+            left: '2px',
+            right: '2px',
+            textAlign: 'center',
+            fontSize: '9px',
+            fontFamily: '"Pixelify Sans", monospace',
+            color: '#ffffff',
+          }}>
+            {slotData.entity || 'unknown'}
+          </div>
+          
+          {/* Bid value - if available */}
+          {slotData.winning_bid?.value && (
+            <div style={{
+              position: 'absolute',
+              top: '40px',
+              left: '2px',
+              right: '2px',
+              textAlign: 'center',
+              fontSize: '9px',
+              fontFamily: '"Pixelify Sans", monospace',
+              color: '#ffaa00',
+            }}>
+              {formatEthValue(slotData.winning_bid.value)}
+            </div>
+          )}
+          
+          {/* Label for arrival time */}
+          <div style={{
+            position: 'absolute',
+            bottom: '8px',
+            left: '2px',
+            right: '2px',
+            textAlign: 'center',
+            fontSize: '8px',
+            fontFamily: '"Pixelify Sans", monospace',
+            color: '#00aaff',
+          }}>
+            {getArrivalTime(slotData.arrival_times?.min_arrival_time)}
+          </div>
+          
+          {/* Arrival time bar */}
+          {renderArrivalBar(slotData.arrival_times?.min_arrival_time)}
         </>
       ) : (
         <div style={{
           position: 'absolute',
           top: '25px',
           left: '5px',
+          right: '5px',
+          textAlign: 'center',
           color: '#ff0000',
           fontSize: '8px',
           fontFamily: '"Pixelify Sans", monospace',
-          whiteSpace: 'pre',
         }}>
           {slotData?.error || 'NO DATA'}
         </div>
