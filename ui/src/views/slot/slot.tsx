@@ -2,39 +2,36 @@ import React, { useEffect, useState } from 'react';
 import axios from 'axios';
 import BaseLayout from '../../components/BaseLayout';
 
-interface BlockData {
-  slot: number;
-  execution_payload_block_hash?: string;
-}
-
-interface ProposerData {
+interface HistoryEntry {
   slot?: number;
-  proposer_validator_index?: number;
+  entity?: string;
+  bid_value?: string | null;
 }
 
-interface WinningBid {
-  relay_name?: string;
-  value?: string;
-  slot_time?: number;
-  builder_pubkey?: string;
+interface BidStats {
+  highest?: number;
+  lowest?: number;
+  average?: number;
+  count?: number;
+  trend?: number;
+  trend_pct?: number;
 }
 
 interface SlotData {
   slot?: number;
-  block?: BlockData;
-  proposer?: ProposerData;
   entity?: string;
-  arrival_times?: {
-    fastest_time?: number;
-    slowest_time?: number;
-    nodes_count?: number;
+  winning_bid?: {
+    value?: string;
+    relay_name?: string;
   };
-  winning_bid?: WinningBid;
+  slot_history?: HistoryEntry[];
+  bid_stats?: BidStats;
   error?: string;
 }
 
 function SlotView() {
   const [slotData, setSlotData] = useState<SlotData | null>(null);
+  const [newData, setNewData] = useState(false);
   const baseUrl = window.location.origin;
 
   useEffect(() => {
@@ -42,192 +39,303 @@ function SlotView() {
       try {
         const response = await axios.get(`${baseUrl}/api/slot`);
         setSlotData(response.data);
+        // Flash indicator when new data arrives
+        setNewData(true);
+        setTimeout(() => setNewData(false), 500);
       } catch (error) {
         console.error('Error fetching slot data:', error);
         setSlotData({ error: 'Failed to fetch data' });
       }
     };
 
-    // Initial fetch
     fetchData();
-    
-    // Set up interval for every 12 seconds (typical slot time)
     const interval = setInterval(fetchData, 12000);
-    
-    // Clean up interval on component unmount
     return () => clearInterval(interval);
-  }, [baseUrl]); // Only recreate when baseUrl changes
-  
-  const getArrivalTime = (time?: number) => {
-    if (!time) return 'N/A';
-    return `${time}ms`;
-  };
+  }, [baseUrl]);
 
-  const formatEthValue = (value?: string) => {
+  // Format ETH value
+  const formatEth = (value?: string) => {
     if (!value) return '0';
-    
-    // Value is likely a large integer string representing wei
     try {
-      // Convert to ETH (divide by 10^18) and format to 4 decimal places
-      const valueInWei = BigInt(value);
-      const eth = Number(valueInWei) / 1e18;
+      const wei = BigInt(value);
+      const eth = Number(wei) / 1e18;
       
-      if (eth < 0.01) {
+      if (eth >= 1) {
+        return `${eth.toFixed(2)}Ξ`;
+      } else if (eth >= 0.01) {
+        return `${eth.toFixed(3)}Ξ`;
+      } else if (eth >= 0.001) {
         return `${eth.toFixed(4)}Ξ`;
       } else {
-        return `${eth.toFixed(2)}Ξ`;
+        return `${(eth * 1000).toFixed(2)}mΞ`;
       }
-    } catch (error) {
-      return value;
+    } catch {
+      return '0';
     }
   };
 
-  // Render the arrival time bar
-  const renderArrivalBar = (time?: number) => {
-    if (!time) return null;
-    
-    const MAX_TIME = 2000;
-    const barWidth = Math.min(58, Math.floor((time / MAX_TIME) * 58));
-    const barY = 52;
-    
-    const pixels = [];
-    
-    // Bar background - thicker bar (2px height)
-    for (let i = 3; i <= 61; i++) {
-      pixels.push(
-        <div 
-          key={`bar-bg-${i}`}
-          style={{
-            position: 'absolute',
-            left: `${i}px`,
-            top: `${barY}px`,
-            width: '1px',
-            height: '4px',
-            backgroundColor: '#111111'
-          }}
-        />
-      );
+  // Get bar height from bid value (in pixels)
+  const getBidHeight = (bidValue?: string | null) => {
+    if (!bidValue) return '3px'; // Small but visible default height for slots with no bid
+    try {
+      const wei = BigInt(bidValue);
+      const eth = Number(wei) / 1e18;
+      // Scale based on realistic bid ranges
+      // Most bids are between 0.01 and 0.5 ETH
+      const height = Math.min(35, Math.max(5, Math.floor(eth * 100)));
+      return `${height}px`;
+    } catch {
+      return '3px';
     }
-    
-    // Bar fill - color gradient based on speed
-    for (let i = 3; i < 3 + barWidth; i++) {
-      // Calculate a gradient from green to red
-      const progress = (i - 3) / 58;
-      // Use HSL where hue 120 is green, 60 is yellow, 0 is red
-      const hue = 120 - (progress * 120);
-      
-      pixels.push(
-        <div 
-          key={`bar-fill-${i}`}
-          style={{
-            position: 'absolute',
-            left: `${i}px`,
-            top: `${barY}px`,
-            width: '1px',
-            height: '4px',
-            backgroundColor: `hsl(${hue}, 100%, 50%)`
-          }}
-        />
-      );
-    }
-    
-    return pixels;
   };
+
+  // Get color from bid value
+  const getBidColor = (bidValue?: string | null) => {
+    if (!bidValue) return '#555555'; // Gray for no bid
+    try {
+      const wei = BigInt(bidValue);
+      const eth = Number(wei) / 1e18;
+      
+      // Color scale from low bids (blue) to high bids (green/yellow)
+      if (eth < 0.01) return '#4444ff'; // Very low
+      if (eth < 0.05) return '#44aaff'; // Low
+      if (eth < 0.1) return '#44ffaa';  // Medium
+      if (eth < 0.2) return '#88ff44';  // High
+      return '#ffcc00';                 // Very high
+    } catch {
+      return '#555555';
+    }
+  };
+
+  // Create CSS for chart container
+  const chartContainerStyle: React.CSSProperties = {
+    display: 'flex',
+    flexDirection: 'column',
+    width: '64px',
+    height: '64px',
+    backgroundColor: '#000000',
+    color: '#ffffff',
+    fontFamily: '"Pixelify Sans", monospace',
+    overflow: 'hidden',
+    position: 'absolute',
+    top: 0,
+    left: 0,
+  };
+
+  // CSS for the header
+  const headerStyle: React.CSSProperties = {
+    textAlign: 'center',
+    padding: '2px 0',
+    fontSize: '7px',
+    fontWeight: 'bold',
+    backgroundColor: newData ? '#222222' : 'transparent',
+    transition: 'background-color 0.3s ease',
+  };
+
+  // CSS for the chart area
+  const chartAreaStyle: React.CSSProperties = {
+    flex: 1,
+    display: 'flex',
+    flexDirection: 'column',
+    position: 'relative',
+    height: '36px', // Make chart slightly smaller
+    marginBottom: '4px', // Add some space at the bottom
+  };
+
+  // CSS for the grid lines
+  const gridLineStyle: React.CSSProperties = {
+    position: 'absolute',
+    left: 0,
+    right: 0,
+    height: '1px',
+    backgroundColor: '#111111',
+  };
+
+  // CSS for the bar container
+  const barContainerStyle: React.CSSProperties = {
+    display: 'flex',
+    flexDirection: 'row',
+    alignItems: 'flex-end',
+    height: '100%',
+    padding: '0 2px',
+    paddingRight: '6px', // Add more padding on the right side
+    zIndex: 1,
+    justifyContent: 'flex-start', // Start from the left
+    overflow: 'hidden',
+    position: 'relative', // For positioning the bottom line
+    borderBottom: '1px solid #333333', // Add a single line at the bottom
+  };
+
+  // CSS for the footer
+  const footerStyle: React.CSSProperties = {
+    display: 'flex',
+    flexDirection: 'column',
+    alignItems: 'center',
+    padding: '2px 0',
+  };
+
+  // CSS for bid value
+  const bidValueStyle: React.CSSProperties = {
+    fontSize: '9px',
+    fontWeight: 'bold',
+    marginBottom: '1px',
+  };
+
+  // CSS for entity name
+  const entityStyle: React.CSSProperties = {
+    fontSize: '5px',
+    color: '#888888',
+    whiteSpace: 'nowrap',
+    overflow: 'hidden',
+    textOverflow: 'ellipsis',
+    width: '100%',
+    textAlign: 'center',
+  };
+
+  // CSS for no data state
+  const noDataStyle: React.CSSProperties = {
+    display: 'flex',
+    justifyContent: 'center',
+    alignItems: 'center',
+    height: '100%',
+    color: '#ff0000',
+    fontSize: '8px',
+  };
+
+  if (!slotData || slotData.error) {
+    return (
+      <BaseLayout title="">
+        <div style={chartContainerStyle}>
+          <div style={noDataStyle}>
+            {slotData?.error || 'NO DATA'}
+          </div>
+        </div>
+      </BaseLayout>
+    );
+  }
+
+  // Get the raw history data from the API
+  const slotHistory = slotData.slot_history || [];
+
+  // Reduce to 15 bids to create more space and better padding
+  // Reverse the array so newest slots are on the right
+  const recentBids = [...slotHistory].slice(0, 15).reverse();
+
+
 
   return (
-    <BaseLayout title="SLOT">
-      {slotData && !slotData.error ? (
-        <>
-          {/* Black background to ensure cleaner look */}
-          <div style={{
-            position: 'absolute',
-            top: '0px',
-            left: '0px',
-            width: '64px',
-            height: '64px',
-            backgroundColor: '#000000',
-            zIndex: -1
-          }}/>
+    <BaseLayout title="">
+      <div style={chartContainerStyle}>
+        {/* Header */}
+        <div style={headerStyle}>
+          MEV {slotData.slot}
+        </div>
+        
+        {/* Chart Area */}
+        <div style={chartAreaStyle}>
           
-          {/* Slot number - dominant element */}
-          <div style={{
-            position: 'absolute',
-            top: '16px',
-            left: '0px',
-            width: '64px',
-            textAlign: 'center',
-            fontSize: '14px',
-            fontFamily: '"Pixelify Sans", monospace',
-            color: '#00ff00',
-            fontWeight: 'bold',
-            lineHeight: '14px'
-          }}>
-            {slotData.slot}
+          {/* Bars */}
+          <div style={barContainerStyle}>
+            {recentBids.length === 0 ? (
+              <div style={{
+                margin: 'auto',
+                fontSize: '6px',
+                color: '#666666',
+              }}>
+                No bid history
+              </div>
+            ) : (
+              recentBids.map((entry, index) => {
+                const isCurrentSlot = entry.slot === slotData.slot;
+                // Skip rendering completely if there's no bid
+                if (!entry.bid_value) {
+                  return (
+                    <div
+                      key={`bar-container-${index}`}
+                      style={{
+                        width: '2px',
+                        minWidth: '2px',
+                        maxWidth: '2px',
+                        marginRight: '2px',
+                      }}
+                    />
+                  );
+                }
+
+                const barHeight = getBidHeight(entry.bid_value);
+                const barColor = getBidColor(entry.bid_value);
+
+                return (
+                  <div
+                    key={`bar-container-${index}`}
+                    style={{
+                      display: 'flex',
+                      flexDirection: 'column',
+                      alignItems: 'center',
+                      width: '2px',
+                      minWidth: '2px',
+                      maxWidth: '2px',
+                      marginRight: '2px',
+                    }}
+                  >
+                    <div
+                      style={{
+                        backgroundColor: '#0a0a0a',
+                        width: '2px',
+                        height: '100%',
+                        position: 'relative',
+                      }}
+                    >
+                      <div
+                        style={{
+                          backgroundColor: barColor,
+                          width: '2px',
+                          height: barHeight,
+                          position: 'absolute',
+                          bottom: 0,
+                          border: isCurrentSlot ? '1px solid #ffffff' : 'none',
+                          boxSizing: 'border-box',
+                        }}
+                      />
+                    </div>
+                  </div>
+                );
+              })
+            )}
           </div>
-          
-          {/* Entity - second most important */}
-          <div style={{
-            position: 'absolute',
-            top: '32px',
-            left: '0px',
-            width: '64px',
-            textAlign: 'center',
-            fontSize: '8px',
-            fontFamily: '"Pixelify Sans", monospace',
-            color: '#ffffff',
-            lineHeight: '8px'
-          }}>
+        </div>
+        
+        {/* Footer */}
+        <div style={footerStyle}>
+          {slotData.winning_bid?.value ? (
+            <div
+              style={{
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                gap: '3px',
+              }}
+            >
+              <div
+                style={{
+                  ...bidValueStyle,
+                  color: getBidColor(slotData.winning_bid.value),
+                }}
+              >
+                {formatEth(slotData.winning_bid.value)}
+              </div>
+            </div>
+          ) : (
+            // Render nothing if there's no bid
+            <div style={{ height: '9px' }}></div>
+          )}
+
+          <div style={entityStyle}>
             {slotData.entity || 'unknown'}
           </div>
-          
-          {/* Bid value - if available */}
-          {slotData.winning_bid?.value && (
-            <div style={{
-              position: 'absolute',
-              top: '42px',
-              left: '0px',
-              width: '64px',
-              textAlign: 'center',
-              fontSize: '8px',
-              fontFamily: '"Pixelify Sans", monospace',
-              color: '#ffaa00',
-              lineHeight: '8px'
-            }}>
-              {formatEthValue(slotData.winning_bid.value)}
-            </div>
-          )}
-          
-          {/* Arrival time bar */}
-          {renderArrivalBar(slotData.arrival_times?.fastest_time)}
 
-          {/* Label for arrival time */}
-          <div style={{
-            position: 'absolute',
-            bottom: '3px',
-            left: '0px',
-            width: '64px',
-            textAlign: 'center',
-            fontSize: '7px',
-            fontFamily: '"Pixelify Sans", monospace',
-            color: '#00aaff',
-          }}>
-            {getArrivalTime(slotData.arrival_times?.fastest_time)}
-          </div>
-        </>
-      ) : (
-        <div style={{
-          position: 'absolute',
-          top: '25px',
-          left: '0px',
-          width: '64px',
-          textAlign: 'center',
-          color: '#ff0000',
-          fontSize: '8px',
-          fontFamily: '"Pixelify Sans", monospace',
-        }}>
-          {slotData?.error || 'NO DATA'}
         </div>
-      )}
+      </div>
     </BaseLayout>
   );
 }

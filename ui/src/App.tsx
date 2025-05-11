@@ -5,7 +5,7 @@ import Proposer from './views/proposer/Proposer';
 import Execution from './views/execution/execution';
 import Admin from './views/admin/Admin';
 import Layer2 from './views/layer2/layer2';
-import Slot from './views/slot/slot';
+import Mev from './views/slot/slot';
 
 function ViewRouter() {
   const [currentView, setCurrentView] = useState<string>('overview');
@@ -44,8 +44,8 @@ function ViewRouter() {
       return <Execution />;
     case 'layer2':
       return <Layer2 />;
-    case 'slot':
-      return <Slot />;
+    case 'mev':
+      return <Mev />;
     case 'overview':
     default:
       return <Overview />;
@@ -60,7 +60,8 @@ function App() {
         <Route path="/views/layer2" element={<Layer2 />} />
         <Route path="/views/proposer" element={<Proposer />} />
         <Route path="/views/execution" element={<Execution />} />
-        <Route path="/views/slot" element={<Slot />} />
+        <Route path="/views/mev" element={<Mev />} />
+        <Route path="/views/slot" element={<Mev />} /> {/* Keep old path for backward compatibility */}
         <Route path="/admin" element={<Admin />} />
         <Route path="/" element={<ViewRouter />} />
       </Routes>
