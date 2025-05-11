@@ -1,17 +1,8 @@
 import React, { useState, useEffect } from 'react';
-
-interface ViewOverride {
-  view: string | null;
-  until: string | null;
-}
-
-interface ViewsResponse {
-  views: string[];
-  currentOverride: ViewOverride;
-}
+import { ViewInfo, ViewOverride, ViewsResponse } from '../../types';
 
 export default function Admin() {
-  const [availableViews, setAvailableViews] = useState<string[]>([]);
+  const [availableViews, setAvailableViews] = useState<ViewInfo[]>([]);
   const [selectedView, setSelectedView] = useState<string>('none');
   const [duration, setDuration] = useState<number>(30);
   const [currentOverride, setCurrentOverride] = useState<ViewOverride | null>(null);
@@ -86,7 +77,7 @@ export default function Admin() {
             >
               <option value="none">None (Clear Override)</option>
               {availableViews.map(view => (
-                <option key={view} value={view}>{view}</option>
+                <option key={view.name} value={view.name}>{view.name}</option>
               ))}
             </select>
           </label>
@@ -117,4 +108,4 @@ export default function Admin() {
       </div>
     </div>
   );
-} 
+}
