@@ -560,18 +560,27 @@ async def get_slot_data():
             if "timings" in slot_data and slot_data["timings"] is not None:
                 block_seen = slot_data.get("timings", {}).get("block_seen", {})
                 if block_seen and len(block_seen) > 0:
-                    # Extract values and filter out non-numeric values
+                    # Extract values and ensure they're numeric
                     arrival_values = []
                     for val in block_seen.values():
-                        if isinstance(val, dict) and "slot_time" in val:
-                            arrival_values.append(val["slot_time"])
-                        elif isinstance(val, (int, float)):
-                            arrival_values.append(val)
-                    
+                        try:
+                            # The API returns arrival times as strings
+                            if isinstance(val, str) and val.isdigit():
+                                arrival_values.append(int(val))
+                            elif isinstance(val, (int, float)):
+                                arrival_values.append(val)
+                            elif isinstance(val, dict) and "slot_time" in val:
+                                arrival_values.append(val["slot_time"])
+                        except (ValueError, TypeError):
+                            continue
+
                     if arrival_values:
+                        # Getting min as the "fastest" and max as the "slowest"
+                        fastest_time = min(arrival_values)
+                        slowest_time = max(arrival_values)
                         arrival_times = {
-                            "min_arrival_time": min(arrival_values),
-                            "max_arrival_time": max(arrival_values),
+                            "fastest_time": fastest_time,  # Using clear names
+                            "slowest_time": slowest_time,  # Using clear names
                             "nodes_count": len(arrival_values)
                         }
         except Exception as timing_error:

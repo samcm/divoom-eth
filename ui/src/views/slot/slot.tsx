@@ -25,8 +25,9 @@ interface SlotData {
   proposer?: ProposerData;
   entity?: string;
   arrival_times?: {
-    min_arrival_time?: number;
-    max_arrival_time?: number;
+    fastest_time?: number;
+    slowest_time?: number;
+    nodes_count?: number;
   };
   winning_bid?: WinningBid;
   error?: string;
@@ -197,8 +198,8 @@ function SlotView() {
           )}
           
           {/* Arrival time bar */}
-          {renderArrivalBar(slotData.arrival_times?.max_arrival_time)}
-          
+          {renderArrivalBar(slotData.arrival_times?.fastest_time)}
+
           {/* Label for arrival time */}
           <div style={{
             position: 'absolute',
@@ -210,7 +211,7 @@ function SlotView() {
             fontFamily: '"Pixelify Sans", monospace',
             color: '#00aaff',
           }}>
-            {getArrivalTime(slotData.arrival_times?.max_arrival_time)}
+            {getArrivalTime(slotData.arrival_times?.fastest_time)}
           </div>
         </>
       ) : (
