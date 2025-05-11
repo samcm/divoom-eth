@@ -1,6 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import axios from 'axios';
 import BaseLayout from '../../components/BaseLayout';
+import SlotHistory from '../../components/SlotHistory';
 
 interface HistoryEntry {
   slot?: number;
@@ -107,138 +108,20 @@ function SlotView() {
     }
   };
 
-  // Create CSS for chart container
-  const chartContainerStyle: React.CSSProperties = {
-    display: 'flex',
-    flexDirection: 'column',
-    width: '64px',
-    height: '64px',
-    backgroundColor: '#000000',
-    color: '#ffffff',
-    fontFamily: '"Pixelify Sans", monospace',
-    WebkitFontSmoothing: 'none',
-    MozOsxFontSmoothing: 'none',
-    fontSmooth: 'never',
-    textRendering: 'geometricPrecision',
-    letterSpacing: '0px',
-    overflow: 'hidden',
-    position: 'absolute',
-    top: 0,
-    left: 0,
-    imageRendering: 'pixelated',
-  };
-
-  // CSS for the header
-  const headerStyle: React.CSSProperties = {
-    textAlign: 'center',
-    padding: '2px 0',
-    fontSize: '7px',
-    fontWeight: 'bold',
-    fontFamily: '"Pixelify Sans", monospace',
-    WebkitFontSmoothing: 'none',
-    MozOsxFontSmoothing: 'none',
-    fontSmooth: 'never',
-    textRendering: 'geometricPrecision',
-    letterSpacing: '0px',
-    backgroundColor: newData ? '#222222' : 'transparent',
-    transition: 'background-color 0.3s ease',
-  };
-
-  // CSS for the chart area
-  const chartAreaStyle: React.CSSProperties = {
-    flex: 1,
-    display: 'flex',
-    flexDirection: 'column',
-    position: 'relative',
-    height: '36px', // Make chart slightly smaller
-    marginBottom: '4px', // Add some space at the bottom
-  };
-
-  // CSS for the grid lines
-  const gridLineStyle: React.CSSProperties = {
-    position: 'absolute',
-    left: 0,
-    right: 0,
-    height: '1px',
-    backgroundColor: '#111111',
-  };
-
-  // CSS for the bar container
-  const barContainerStyle: React.CSSProperties = {
-    display: 'flex',
-    flexDirection: 'row',
-    alignItems: 'flex-end',
-    height: '100%',
-    padding: '0 2px',
-    paddingRight: '6px', // Add more padding on the right side
-    zIndex: 1,
-    justifyContent: 'flex-start', // Start from the left
-    overflow: 'hidden',
-    position: 'relative', // For positioning the bottom line
-    borderBottom: '1px solid #333333', // Add a single line at the bottom
-  };
-
-  // CSS for the footer
-  const footerStyle: React.CSSProperties = {
-    display: 'flex',
-    flexDirection: 'column',
-    alignItems: 'center',
-    padding: '2px 0',
-  };
-
-  // CSS for bid value
-  const bidValueStyle: React.CSSProperties = {
-    fontSize: '9px',
-    fontFamily: '"Pixelify Sans", monospace',
-    WebkitFontSmoothing: 'none',
-    MozOsxFontSmoothing: 'none',
-    fontSmooth: 'never',
-    textRendering: 'geometricPrecision',
-    letterSpacing: '0px',
-    fontWeight: 'bold',
-    marginBottom: '1px',
-  };
-
-  // CSS for entity name
-  const entityStyle: React.CSSProperties = {
-    fontSize: '5px',
-    fontFamily: '"Pixelify Sans", monospace',
-    WebkitFontSmoothing: 'none',
-    MozOsxFontSmoothing: 'none',
-    fontSmooth: 'never',
-    textRendering: 'geometricPrecision',
-    letterSpacing: '0px',
-    color: '#888888',
-    whiteSpace: 'nowrap',
-    overflow: 'hidden',
-    textOverflow: 'ellipsis',
-    width: '100%',
-    textAlign: 'center',
-  };
-
-  // CSS for no data state
-  const noDataStyle: React.CSSProperties = {
-    display: 'flex',
-    justifyContent: 'center',
-    alignItems: 'center',
-    height: '100%',
-    color: '#ff0000',
-    fontSize: '8px',
-    fontFamily: '"Pixelify Sans", monospace',
-    WebkitFontSmoothing: 'none',
-    MozOsxFontSmoothing: 'none',
-    fontSmooth: 'never',
-    textRendering: 'geometricPrecision',
-    letterSpacing: '0px',
-  };
-
   if (!slotData || slotData.error) {
     return (
       <BaseLayout title="MEV">
-        <div style={chartContainerStyle}>
-          <div style={noDataStyle}>
-            {slotData?.error || 'NO DATA'}
-          </div>
+        <div style={{
+          display: 'flex',
+          justifyContent: 'center',
+          alignItems: 'center',
+          height: '100%',
+          color: '#ff0000',
+          fontSize: '8px',
+          fontFamily: '"Pixelify Sans", monospace',
+          whiteSpace: 'pre',
+        }}>
+          {slotData?.error || 'NO DATA'}
         </div>
       </BaseLayout>
     );
@@ -251,125 +134,110 @@ function SlotView() {
   // Reverse the array so newest slots are on the right
   const recentBids = [...slotHistory].slice(0, 15).reverse();
 
-
   return (
     <BaseLayout title="MEV">
-      <div style={chartContainerStyle}>
-        {/* Header */}
-        <div style={headerStyle}>
-          {slotData.slot}
-        </div>
-        
-        {/* Chart Area */}
-        <div style={chartAreaStyle}>
-          
-          {/* Bars */}
-          <div style={barContainerStyle}>
-            {recentBids.length === 0 ? (
-              <div style={{
-                margin: 'auto',
-                fontSize: '6px',
-                fontFamily: '"Pixelify Sans", monospace',
-                WebkitFontSmoothing: 'none',
-                MozOsxFontSmoothing: 'none',
-                fontSmooth: 'never',
-                textRendering: 'geometricPrecision',
-                letterSpacing: '0px',
-                color: '#666666',
-              }}>
-                No bid history
-              </div>
-            ) : (
-              recentBids.map((entry, index) => {
-                const isCurrentSlot = entry.slot === slotData.slot;
-                // Skip rendering completely if there's no bid
-                if (!entry.bid_value) {
-                  return (
-                    <div
-                      key={`bar-container-${index}`}
-                      style={{
-                        width: '2px',
-                        minWidth: '2px',
-                        maxWidth: '2px',
-                        marginRight: '2px',
-                      }}
-                    />
-                  );
-                }
-
-                const barHeight = getBidHeight(entry.bid_value);
-                const barColor = getBidColor(entry.bid_value);
-
-                return (
-                  <div
-                    key={`bar-container-${index}`}
-                    style={{
-                      display: 'flex',
-                      flexDirection: 'column',
-                      alignItems: 'center',
-                      width: '2px',
-                      minWidth: '2px',
-                      maxWidth: '2px',
-                      marginRight: '2px',
-                    }}
-                  >
-                    <div
-                      style={{
-                        backgroundColor: '#0a0a0a',
-                        width: '2px',
-                        height: '100%',
-                        position: 'relative',
-                      }}
-                    >
-                      <div
-                        style={{
-                          backgroundColor: barColor,
-                          width: '2px',
-                          height: barHeight,
-                          position: 'absolute',
-                          bottom: 0,
-                          border: isCurrentSlot ? '1px solid #ffffff' : 'none',
-                          boxSizing: 'border-box',
-                        }}
-                      />
-                    </div>
-                  </div>
-                );
-              })
-            )}
+      <SlotHistory />
+      
+      {/* Chart Area */}
+      <div style={{
+        position: 'absolute',
+        bottom: '10px',
+        left: '2px',
+        width: '60px',
+        height: '24px',
+        display: 'flex',
+        alignItems: 'flex-end',
+        justifyContent: 'space-between',
+        gap: '1px',
+      }}>
+        {recentBids.length === 0 ? (
+          <div style={{
+            margin: 'auto',
+            fontSize: '8px',
+            fontFamily: '"Pixelify Sans", monospace',
+            whiteSpace: 'pre',
+            color: '#666666',
+          }}>
+            No bid history
           </div>
-        </div>
-        
-        {/* Footer */}
-        <div style={footerStyle}>
-          {slotData.winning_bid?.value ? (
-            <div
-              style={{
-                display: 'flex',
-                alignItems: 'center',
-                justifyContent: 'center',
-                gap: '3px',
-              }}
-            >
+        ) : (
+          recentBids.map((entry, index) => {
+            // Skip rendering completely if there's no bid
+            if (!entry.bid_value) {
+              return (
+                <div
+                  key={`bar-${index}`}
+                  style={{
+                    width: '2px',
+                    height: '1px',
+                    backgroundColor: '#111111',
+                  }}
+                />
+              );
+            }
+
+            const isCurrentSlot = entry.slot === slotData.slot;
+            const barHeight = getBidHeight(entry.bid_value);
+            const barColor = getBidColor(entry.bid_value);
+
+            return (
               <div
+                key={`bar-${index}`}
                 style={{
-                  ...bidValueStyle,
-                  color: getBidColor(slotData.winning_bid.value),
+                  width: '2px',
+                  height: barHeight,
+                  backgroundColor: barColor,
+                  border: isCurrentSlot ? '1px solid #ffffff' : 'none',
                 }}
-              >
-                {formatEth(slotData.winning_bid.value)}
-              </div>
-            </div>
-          ) : (
-            // Render nothing if there's no bid
-            <div style={{ height: '9px' }}></div>
-          )}
-
-          <div style={entityStyle}>
-            {slotData.entity || 'unknown'}
-          </div>
-
+              />
+            );
+          })
+        )}
+      </div>
+      
+      {/* Current value */}
+      {slotData.winning_bid?.value && (
+        <div style={{
+          position: 'absolute',
+          bottom: '1px',
+          width: '100%',
+          textAlign: 'center',
+          color: getBidColor(slotData.winning_bid.value),
+          fontSize: '8px',
+          fontFamily: '"Pixelify Sans", monospace',
+          fontWeight: '400',
+          whiteSpace: 'pre',
+        }}>
+          {formatEth(slotData.winning_bid.value)}
         </div>
+      )}
+      
+      {/* Entity name */}
+      {slotData.entity && (
+        <div style={{
+          position: 'absolute',
+          top: '30px',
+          left: '2px',
+          color: '#888888',
+          fontSize: '8px',
+          fontFamily: '"Pixelify Sans", monospace',
+          whiteSpace: 'pre',
+        }}>
+          {slotData.entity.substring(0, 8).toUpperCase()}
+        </div>
+      )}
+      
+      {/* Slot number */}
+      <div style={{
+        position: 'absolute',
+        top: '20px',
+        right: '2px',
+        color: '#997700',
+        fontSize: '8px',
+        fontFamily: '"Pixelify Sans", monospace',
+        whiteSpace: 'pre',
+      }}>
+        #{slotData.slot}
       </div>
     </BaseLayout>
   );
