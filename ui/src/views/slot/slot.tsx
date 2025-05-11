@@ -1,7 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import axios from 'axios';
 import BaseLayout from '../../components/BaseLayout';
-import SlotHistory from '../../components/SlotHistory';
 
 interface HistoryEntry {
   slot?: number;
@@ -136,8 +135,6 @@ function SlotView() {
 
   return (
     <BaseLayout title="MEV">
-      <SlotHistory />
-      
       {/* Chart Area */}
       <div style={{
         position: 'absolute',
@@ -149,6 +146,7 @@ function SlotView() {
         alignItems: 'flex-end',
         justifyContent: 'space-between',
         gap: '1px',
+        borderBottom: '1px solid #333333', // Add bottom chart line
       }}>
         {recentBids.length === 0 ? (
           <div style={{
@@ -211,34 +209,6 @@ function SlotView() {
           {formatEth(slotData.winning_bid.value)}
         </div>
       )}
-      
-      {/* Entity name */}
-      {slotData.entity && (
-        <div style={{
-          position: 'absolute',
-          top: '30px',
-          left: '2px',
-          color: '#888888',
-          fontSize: '8px',
-          fontFamily: '"Pixelify Sans", monospace',
-          whiteSpace: 'pre',
-        }}>
-          {slotData.entity.substring(0, 8).toUpperCase()}
-        </div>
-      )}
-      
-      {/* Slot number */}
-      <div style={{
-        position: 'absolute',
-        top: '20px',
-        right: '2px',
-        color: '#997700',
-        fontSize: '8px',
-        fontFamily: '"Pixelify Sans", monospace',
-        whiteSpace: 'pre',
-      }}>
-        #{slotData.slot}
-      </div>
     </BaseLayout>
   );
 }
