@@ -2,6 +2,7 @@ import os
 import asyncio
 from beacon_client import BeaconClient
 from divoom_client import DivoomClient
+from slot_client import SlotClient
 from fastapi import FastAPI, Response, Body
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
@@ -61,7 +62,7 @@ class View:
     refresh_interval: float  # In seconds, 0 means no refresh
     description: Optional[str] = None
 
-ENABLED_VIEWS = os.getenv('ENABLED_VIEWS', 'proposer,overview,execution,layer2').split(',')
+ENABLED_VIEWS = os.getenv('ENABLED_VIEWS', 'proposer,overview,execution,layer2,slot').split(',')
 
 VIEWS = {
     "proposer": View(
@@ -91,6 +92,13 @@ VIEWS = {
         needs_refresh=True,
         refresh_interval=0.1,
         description="Layer 2 metrics"
+    ),
+    "slot": View(
+        name="slot",
+        enabled="slot" in ENABLED_VIEWS,
+        needs_refresh=False,
+        refresh_interval=4,  # Refresh every slot
+        description="Current slot data from ethpandaops lab"
     )
 }
 
@@ -135,6 +143,7 @@ class ViewRotation:
 
 # Add to the global variables
 l2_tracker = L2MetricsTracker()
+slot_client = SlotClient()
 screenshot_cache = None
 browser_lock = asyncio.Lock()
 playwright = None
@@ -255,6 +264,10 @@ async def lifespan(app: FastAPI):
     
     # Start L2 tracker
     await l2_tracker.start()
+    
+    # Initialize slot client and fetch initial data
+    asyncio.create_task(slot_client.get_slot_data())
+    print("Initialized slot client")
     
     # Start display update task
     asyncio.create_task(update_display())
@@ -530,6 +543,57 @@ async def get_l2_metrics():
         ],
         "is_connected": l2_tracker.get_connection_status()
     }
+
+@app.get("/api/slot")
+async def get_slot_data():
+    """Get current slot data from ethpandaops lab"""
+    try:
+        # This will either return cached data or fetch new data if needed
+        slot_data = await slot_client.get_slot_data()
+        
+        if not slot_data:
+            return {"error": "Failed to fetch slot data"}
+        
+        # Process arrival times if available
+        arrival_times = {}
+        try:
+            if "timings" in slot_data and slot_data["timings"] is not None:
+                block_seen = slot_data.get("timings", {}).get("block_seen", {})
+                if block_seen and len(block_seen) > 0:
+                    # Extract values and filter out non-numeric values
+                    arrival_values = []
+                    for val in block_seen.values():
+                        if isinstance(val, dict) and "slot_time" in val:
+                            arrival_values.append(val["slot_time"])
+                        elif isinstance(val, (int, float)):
+                            arrival_values.append(val)
+                    
+                    if arrival_values:
+                        arrival_times = {
+                            "min_arrival_time": min(arrival_values),
+                            "max_arrival_time": max(arrival_values),
+                            "nodes_count": len(arrival_values)
+                        }
+        except Exception as timing_error:
+            logging.error(f"Error processing timings: {timing_error}")
+            arrival_times = {}
+        
+        # Extract and return the relevant data from the slot response
+        return {
+            "slot": slot_data.get("slot"),
+            "network": slot_data.get("network"),
+            "processed_at": slot_data.get("processed_at"),
+            "block": slot_data.get("block", {}),
+            "proposer": slot_data.get("proposer", {}),
+            "entity": slot_data.get("entity"),
+            "nodes_count": len(slot_data.get("nodes", {})) if slot_data.get("nodes") else 0,
+            "arrival_times": arrival_times
+        }
+    except Exception as e:
+        logging.error(f"Error getting slot data: {e}")
+        import traceback
+        traceback.print_exc()
+        return {"error": f"Failed to fetch slot data: {str(e)}"}
 
 # Verify dist directory exists before mounting
 if not os.path.exists(REACT_APP_PATH):
