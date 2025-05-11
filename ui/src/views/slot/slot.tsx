@@ -116,10 +116,16 @@ function SlotView() {
     backgroundColor: '#000000',
     color: '#ffffff',
     fontFamily: '"Pixelify Sans", monospace',
+    WebkitFontSmoothing: 'none',
+    MozOsxFontSmoothing: 'none',
+    fontSmooth: 'never',
+    textRendering: 'geometricPrecision',
+    letterSpacing: '0px',
     overflow: 'hidden',
     position: 'absolute',
     top: 0,
     left: 0,
+    imageRendering: 'pixelated',
   };
 
   // CSS for the header
@@ -128,6 +134,12 @@ function SlotView() {
     padding: '2px 0',
     fontSize: '7px',
     fontWeight: 'bold',
+    fontFamily: '"Pixelify Sans", monospace',
+    WebkitFontSmoothing: 'none',
+    MozOsxFontSmoothing: 'none',
+    fontSmooth: 'never',
+    textRendering: 'geometricPrecision',
+    letterSpacing: '0px',
     backgroundColor: newData ? '#222222' : 'transparent',
     transition: 'background-color 0.3s ease',
   };
@@ -177,6 +189,12 @@ function SlotView() {
   // CSS for bid value
   const bidValueStyle: React.CSSProperties = {
     fontSize: '9px',
+    fontFamily: '"Pixelify Sans", monospace',
+    WebkitFontSmoothing: 'none',
+    MozOsxFontSmoothing: 'none',
+    fontSmooth: 'never',
+    textRendering: 'geometricPrecision',
+    letterSpacing: '0px',
     fontWeight: 'bold',
     marginBottom: '1px',
   };
@@ -184,6 +202,12 @@ function SlotView() {
   // CSS for entity name
   const entityStyle: React.CSSProperties = {
     fontSize: '5px',
+    fontFamily: '"Pixelify Sans", monospace',
+    WebkitFontSmoothing: 'none',
+    MozOsxFontSmoothing: 'none',
+    fontSmooth: 'never',
+    textRendering: 'geometricPrecision',
+    letterSpacing: '0px',
     color: '#888888',
     whiteSpace: 'nowrap',
     overflow: 'hidden',
@@ -200,11 +224,17 @@ function SlotView() {
     height: '100%',
     color: '#ff0000',
     fontSize: '8px',
+    fontFamily: '"Pixelify Sans", monospace',
+    WebkitFontSmoothing: 'none',
+    MozOsxFontSmoothing: 'none',
+    fontSmooth: 'never',
+    textRendering: 'geometricPrecision',
+    letterSpacing: '0px',
   };
 
   if (!slotData || slotData.error) {
     return (
-      <BaseLayout title="">
+      <BaseLayout title="MEV">
         <div style={chartContainerStyle}>
           <div style={noDataStyle}>
             {slotData?.error || 'NO DATA'}
@@ -222,13 +252,12 @@ function SlotView() {
   const recentBids = [...slotHistory].slice(0, 15).reverse();
 
 
-
   return (
-    <BaseLayout title="">
+    <BaseLayout title="MEV">
       <div style={chartContainerStyle}>
         {/* Header */}
         <div style={headerStyle}>
-          MEV {slotData.slot}
+          {slotData.slot}
         </div>
         
         {/* Chart Area */}
@@ -240,6 +269,12 @@ function SlotView() {
               <div style={{
                 margin: 'auto',
                 fontSize: '6px',
+                fontFamily: '"Pixelify Sans", monospace',
+                WebkitFontSmoothing: 'none',
+                MozOsxFontSmoothing: 'none',
+                fontSmooth: 'never',
+                textRendering: 'geometricPrecision',
+                letterSpacing: '0px',
                 color: '#666666',
               }}>
                 No bid history
