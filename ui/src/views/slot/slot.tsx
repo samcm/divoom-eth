@@ -26,7 +26,7 @@ interface SlotData {
   entity?: string;
   arrival_times?: {
     min_arrival_time?: number;
-    max_arrival_time?: number; // Added this field since we need it (values are swapped)
+    max_arrival_time?: number;
   };
   winning_bid?: WinningBid;
   error?: string;
@@ -81,63 +81,18 @@ function SlotView() {
     }
   };
 
-  // Create the background grid layout
-  const renderGrid = () => {
-    const cells = [];
-    
-    // Add horizontal lines
-    for (let y = 16; y < 64; y += 16) {
-      for (let x = 0; x < 64; x++) {
-        cells.push(
-          <div
-            key={`h-${y}-${x}`}
-            style={{
-              position: 'absolute',
-              left: `${x}px`,
-              top: `${y}px`,
-              width: '1px',
-              height: '1px',
-              backgroundColor: '#222222',
-            }}
-          />
-        );
-      }
-    }
-    
-    // Add vertical lines
-    for (let x = 0; x < 64; x += 16) {
-      for (let y = 0; y < 64; y++) {
-        cells.push(
-          <div
-            key={`v-${x}-${y}`}
-            style={{
-              position: 'absolute',
-              left: `${x}px`,
-              top: `${y}px`,
-              width: '1px',
-              height: '1px',
-              backgroundColor: '#222222',
-            }}
-          />
-        );
-      }
-    }
-    
-    return cells;
-  };
-
   // Render the arrival time bar
   const renderArrivalBar = (time?: number) => {
     if (!time) return null;
     
     const MAX_TIME = 2000;
-    const barWidth = Math.min(60, Math.floor((time / MAX_TIME) * 60));
-    const barY = 58;
+    const barWidth = Math.min(58, Math.floor((time / MAX_TIME) * 58));
+    const barY = 52;
     
     const pixels = [];
     
-    // Bar background
-    for (let i = 2; i <= 62; i++) {
+    // Bar background - thicker bar (2px height)
+    for (let i = 3; i <= 61; i++) {
       pixels.push(
         <div 
           key={`bar-bg-${i}`}
@@ -146,17 +101,17 @@ function SlotView() {
             left: `${i}px`,
             top: `${barY}px`,
             width: '1px',
-            height: '3px',
-            backgroundColor: '#222222'
+            height: '4px',
+            backgroundColor: '#111111'
           }}
         />
       );
     }
     
     // Bar fill - color gradient based on speed
-    for (let i = 2; i < 2 + barWidth; i++) {
+    for (let i = 3; i < 3 + barWidth; i++) {
       // Calculate a gradient from green to red
-      const progress = (i - 2) / 60;
+      const progress = (i - 3) / 58;
       // Use HSL where hue 120 is green, 60 is yellow, 0 is red
       const hue = 120 - (progress * 120);
       
@@ -168,7 +123,7 @@ function SlotView() {
             left: `${i}px`,
             top: `${barY}px`,
             width: '1px',
-            height: '3px',
+            height: '4px',
             backgroundColor: `hsl(${hue}, 100%, 50%)`
           }}
         />
@@ -182,20 +137,29 @@ function SlotView() {
     <BaseLayout title="SLOT">
       {slotData && !slotData.error ? (
         <>
-          {/* Background grid */}
-          {renderGrid()}
+          {/* Black background to ensure cleaner look */}
+          <div style={{
+            position: 'absolute',
+            top: '0px',
+            left: '0px',
+            width: '64px',
+            height: '64px',
+            backgroundColor: '#000000',
+            zIndex: -1
+          }}/>
           
           {/* Slot number - dominant element */}
           <div style={{
             position: 'absolute',
-            top: '18px',
-            left: '2px',
-            right: '2px',
+            top: '16px',
+            left: '0px',
+            width: '64px',
             textAlign: 'center',
-            fontSize: '12px',
+            fontSize: '14px',
             fontFamily: '"Pixelify Sans", monospace',
             color: '#00ff00',
             fontWeight: 'bold',
+            lineHeight: '14px'
           }}>
             {slotData.slot}
           </div>
@@ -203,13 +167,14 @@ function SlotView() {
           {/* Entity - second most important */}
           <div style={{
             position: 'absolute',
-            top: '30px',
-            left: '2px',
-            right: '2px',
+            top: '32px',
+            left: '0px',
+            width: '64px',
             textAlign: 'center',
-            fontSize: '9px',
+            fontSize: '8px',
             fontFamily: '"Pixelify Sans", monospace',
             color: '#ffffff',
+            lineHeight: '8px'
           }}>
             {slotData.entity || 'unknown'}
           </div>
@@ -218,41 +183,42 @@ function SlotView() {
           {slotData.winning_bid?.value && (
             <div style={{
               position: 'absolute',
-              top: '40px',
-              left: '2px',
-              right: '2px',
+              top: '42px',
+              left: '0px',
+              width: '64px',
               textAlign: 'center',
-              fontSize: '9px',
+              fontSize: '8px',
               fontFamily: '"Pixelify Sans", monospace',
               color: '#ffaa00',
+              lineHeight: '8px'
             }}>
               {formatEthValue(slotData.winning_bid.value)}
             </div>
           )}
           
-          {/* Label for arrival time - Using max_arrival_time since the values are swapped */}
+          {/* Arrival time bar */}
+          {renderArrivalBar(slotData.arrival_times?.max_arrival_time)}
+          
+          {/* Label for arrival time */}
           <div style={{
             position: 'absolute',
-            bottom: '8px',
-            left: '2px',
-            right: '2px',
+            bottom: '3px',
+            left: '0px',
+            width: '64px',
             textAlign: 'center',
-            fontSize: '8px',
+            fontSize: '7px',
             fontFamily: '"Pixelify Sans", monospace',
             color: '#00aaff',
           }}>
             {getArrivalTime(slotData.arrival_times?.max_arrival_time)}
           </div>
-
-          {/* Arrival time bar */}
-          {renderArrivalBar(slotData.arrival_times?.max_arrival_time)}
         </>
       ) : (
         <div style={{
           position: 'absolute',
           top: '25px',
-          left: '5px',
-          right: '5px',
+          left: '0px',
+          width: '64px',
           textAlign: 'center',
           color: '#ff0000',
           fontSize: '8px',
