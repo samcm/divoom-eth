@@ -44,7 +44,7 @@ function SlotView() {
         setTimeout(() => setNewData(false), 500);
       } catch (error) {
         console.error('Error fetching slot data:', error);
-        setSlotData({ error: 'Failed to fetch data' });
+        // Don't set error state, we'll just render nothing
       }
     };
 
@@ -89,41 +89,9 @@ function SlotView() {
     }
   };
 
-  // Get color from bid value
-  const getBidColor = (bidValue?: string | null) => {
-    if (!bidValue) return '#555555'; // Gray for no bid
-    try {
-      const wei = BigInt(bidValue);
-      const eth = Number(wei) / 1e18;
-      
-      // Color scale from low bids (blue) to high bids (green/yellow)
-      if (eth < 0.01) return '#4444ff'; // Very low
-      if (eth < 0.05) return '#44aaff'; // Low
-      if (eth < 0.1) return '#44ffaa';  // Medium
-      if (eth < 0.2) return '#88ff44';  // High
-      return '#ffcc00';                 // Very high
-    } catch {
-      return '#555555';
-    }
-  };
-
-  if (!slotData || slotData.error) {
-    return (
-      <BaseLayout title="MEV">
-        <div style={{
-          display: 'flex',
-          justifyContent: 'center',
-          alignItems: 'center',
-          height: '100%',
-          color: '#ff0000',
-          fontSize: '8px',
-          fontFamily: '"Pixelify Sans", monospace',
-          whiteSpace: 'pre',
-        }}>
-          {slotData?.error || 'NO DATA'}
-        </div>
-      </BaseLayout>
-    );
+  // If no data or error, render nothing
+  if (!slotData) {
+    return <BaseLayout title="MEV" />;
   }
 
   // Get the raw history data from the API
@@ -133,12 +101,25 @@ function SlotView() {
   // Reverse the array so newest slots are on the right
   const recentBids = [...slotHistory].slice(0, 15).reverse();
 
+  // Find the max bid value in the recent bids
+  let maxBidValue: string | null = null;
+  let maxBidSlot: number | undefined = undefined;
+  
+  recentBids.forEach((entry) => {
+    if (entry.bid_value) {
+      if (!maxBidValue || BigInt(entry.bid_value) > BigInt(maxBidValue)) {
+        maxBidValue = entry.bid_value;
+        maxBidSlot = entry.slot;
+      }
+    }
+  });
+
   return (
     <BaseLayout title="MEV">
       {/* Chart Area */}
       <div style={{
         position: 'absolute',
-        bottom: '10px',
+        bottom: '11px', // 1px more for padding between chart and latest value
         left: '2px',
         width: '60px',
         height: '24px',
@@ -146,7 +127,7 @@ function SlotView() {
         alignItems: 'flex-end',
         justifyContent: 'space-between',
         gap: '1px',
-        borderBottom: '1px solid #333333', // Add bottom chart line
+        borderBottom: '2px solid #333333', // 2 pixel border at bottom
       }}>
         {recentBids.length === 0 ? (
           <div style={{
@@ -174,10 +155,11 @@ function SlotView() {
               );
             }
 
-            const isCurrentSlot = entry.slot === slotData.slot;
+            const isMaxBid = entry.slot === maxBidSlot;
             const barHeight = getBidHeight(entry.bid_value);
-            const barColor = getBidColor(entry.bid_value);
-
+            // Use gold for max bid, blue for all others
+            const barColor = isMaxBid ? '#ffcc00' : '#44aaff';
+            
             return (
               <div
                 key={`bar-${index}`}
@@ -185,7 +167,6 @@ function SlotView() {
                   width: '2px',
                   height: barHeight,
                   backgroundColor: barColor,
-                  border: isCurrentSlot ? '1px solid #ffffff' : 'none',
                 }}
               />
             );
@@ -193,20 +174,20 @@ function SlotView() {
         )}
       </div>
       
-      {/* Current value */}
-      {slotData.winning_bid?.value && (
+      {/* Show max bid value instead of current */}
+      {maxBidValue && (
         <div style={{
           position: 'absolute',
           bottom: '1px',
           width: '100%',
           textAlign: 'center',
-          color: getBidColor(slotData.winning_bid.value),
+          color: '#ffcc00', // Gold for max value
           fontSize: '8px',
           fontFamily: '"Pixelify Sans", monospace',
           fontWeight: '400',
           whiteSpace: 'pre',
         }}>
-          {formatEth(slotData.winning_bid.value)}
+          {formatEth(maxBidValue)}
         </div>
       )}
     </BaseLayout>

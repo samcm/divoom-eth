@@ -26,6 +26,38 @@ class SlotClient:
             'referer': 'https://lab.ethpandaops.io/',
             'user-agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/135.0.0.0 Safari/537.36'
         }
+        # Start background fetch task
+        self.fetch_task = None
+        
+    async def start(self):
+        """Start background fetching task"""
+        if self.fetch_task is None:
+            self.fetch_task = asyncio.create_task(self._background_fetch())
+            logging.info("Started slot data background fetch task")
+    
+    async def stop(self):
+        """Stop background fetching task"""
+        if self.fetch_task:
+            self.fetch_task.cancel()
+            try:
+                await self.fetch_task
+            except asyncio.CancelledError:
+                pass
+            self.fetch_task = None
+            logging.info("Stopped slot data background fetch task")
+    
+    async def _background_fetch(self):
+        """Background task to periodically fetch slot data"""
+        while True:
+            try:
+                # Calculate current slot - 3 to ensure data is available
+                slot = self.calculate_current_slot() - 3
+                await self._fetch_slot_data(slot)
+            except Exception as e:
+                logging.error(f"Error in background fetch: {e}")
+            
+            # Wait for next update interval
+            await asyncio.sleep(self.update_interval)
     
     def calculate_current_slot(self) -> int:
         """Calculate the current slot based on time since genesis"""
@@ -39,63 +71,62 @@ class SlotClient:
         current_slot = seconds_since_genesis // slot_time
         return current_slot
     
-    async def get_slot_data(self, slot: Optional[int] = None) -> Dict:
-        """Fetch slot data from ethpandaops lab"""
-        current_time = time.time()
+    async def get_slot_data(self) -> Dict:
+        """
+        Return the cached slot data without fetching.
+        This is the API endpoint method that clients will call.
+        """
+        return self.latest_slot_data if self.latest_slot_data else {}
+    
+    async def _fetch_slot_data(self, slot: int) -> Dict:
+        """
+        Internal method to fetch slot data from ethpandaops lab.
+        This updates our internal cache but doesn't return anything.
+        """
+        try:
+            # Prepare the message parameter for the API call
+            message = json.dumps({
+                "network": self.network,
+                "slot": str(slot)
+            })
 
-        # Check if we need to update (either first time or update interval passed)
-        if (self.latest_slot_data is None or
-            current_time - self.last_update_time > self.update_interval):
+            # Build the query URL with proper encoding
+            url = f"{self.base_url}?connect=v1&encoding=json&message={message}"
 
-            # Calculate current slot if not provided
-            if slot is None:
-                # Get slot from 3 slots ago to ensure data is available
-                slot = self.calculate_current_slot() - 3
+            async with aiohttp.ClientSession() as session:
+                async with session.get(url, headers=self.headers) as response:
+                    if response.status == 200:
+                        response_data = await response.json()
+                        if 'data' in response_data and response_data['data'] is not None:
+                            new_slot_data = response_data['data']
 
-            try:
-                # Prepare the message parameter for the API call
-                message = json.dumps({
-                    "network": self.network,
-                    "slot": str(slot)
-                })
+                            # Only add to history if it's a new slot
+                            if (self.latest_slot_data is None or
+                                new_slot_data.get('slot') != self.latest_slot_data.get('slot')):
+                                
+                                # Clean entity name for display
+                                if 'entity' in new_slot_data and new_slot_data['entity']:
+                                    new_slot_data['entity'] = self._clean_entity_name(new_slot_data['entity'])
 
-                # Build the query URL with proper encoding
-                url = f"{self.base_url}?connect=v1&encoding=json&message={message}"
+                                # Store the complete payload
+                                self.slot_payloads.append(new_slot_data)
+                                
+                                # Keep only the most recent N payloads
+                                if len(self.slot_payloads) > self.max_history:
+                                    self.slot_payloads.pop(0)  # Remove oldest entry
 
-                async with aiohttp.ClientSession() as session:
-                    async with session.get(url, headers=self.headers) as response:
-                        if response.status == 200:
-                            response_data = await response.json()
-                            if 'data' in response_data and response_data['data'] is not None:
-                                new_slot_data = response_data['data']
-
-                                # Only add to history if it's a new slot
-                                if (self.latest_slot_data is None or
-                                    new_slot_data.get('slot') != self.latest_slot_data.get('slot')):
-                                    
-                                    # Clean entity name for display
-                                    if 'entity' in new_slot_data and new_slot_data['entity']:
-                                        new_slot_data['entity'] = self._clean_entity_name(new_slot_data['entity'])
-
-                                    # Store the complete payload
-                                    self.slot_payloads.append(new_slot_data)
-                                    
-                                    # Keep only the most recent N payloads
-                                    if len(self.slot_payloads) > self.max_history:
-                                        self.slot_payloads.pop(0)  # Remove oldest entry
-
-                                # Store the full response data
-                                self.latest_slot_data = new_slot_data
-                                self.last_update_time = current_time
-                                logging.info(f"Updated slot data for slot {slot}")
-                            else:
-                                logging.error(f"Invalid response format or empty data: {response_data}")
+                            # Store the full response data
+                            self.latest_slot_data = new_slot_data
+                            self.last_update_time = time.time()
+                            logging.info(f"Updated slot data for slot {slot}")
                         else:
-                            logging.error(f"Failed to fetch slot data: {response.status}")
+                            logging.error(f"Invalid response format or empty data: {response_data}")
+                    else:
+                        logging.error(f"Failed to fetch slot data: {response.status}")
 
-            except Exception as e:
-                logging.error(f"Error fetching slot data: {e}")
-
+        except Exception as e:
+            logging.error(f"Error fetching slot data: {e}")
+        
         return self.latest_slot_data if self.latest_slot_data else {}
     
     def _clean_entity_name(self, entity: str) -> str:
@@ -175,10 +206,6 @@ class SlotClient:
             logging.error(f"Error processing arrival times: {e}")
             
         return arrival_times
-    
-    def get_cached_slot_data(self) -> Dict:
-        """Return the cached slot data without making a new request"""
-        return self.latest_slot_data if self.latest_slot_data else {}
     
     def get_slot_history(self) -> List[Dict]:
         """

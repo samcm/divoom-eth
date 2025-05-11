@@ -264,23 +264,24 @@ async def lifespan(app: FastAPI):
     
     # Start L2 tracker
     await l2_tracker.start()
-    
-    # Initialize slot client and fetch initial data
-    asyncio.create_task(slot_client.get_slot_data())
+
+    # Initialize slot client and start background fetch
+    await slot_client.start()
     print("Initialized slot client")
-    
+
     # Start display update task
     asyncio.create_task(update_display())
-    
+
     # Start screenshot cache update task
     asyncio.create_task(update_screenshot_cache())
-    
+
     yield  # Server is running
-    
+
     # Cleanup
     print("Shutting down...")
     await cleanup_browser()
     await l2_tracker.stop()
+    await slot_client.stop()
 
 app = FastAPI(lifespan=lifespan)
 
@@ -547,11 +548,11 @@ async def get_l2_metrics():
 async def get_slot_data():
     """Get current slot data from ethpandaops lab"""
     try:
-        # This will either return cached data or fetch new data if needed
+        # Get cached data (background fetch updates this)
         slot_data = await slot_client.get_slot_data()
 
         if not slot_data:
-            return {"error": "Failed to fetch slot data"}
+            return {}  # Return empty object instead of error
 
         # Extract winning bid
         winning_bid = None
@@ -658,7 +659,7 @@ async def get_slot_data():
         logging.error(f"Error getting slot data: {e}")
         import traceback
         traceback.print_exc()
-        return {"error": f"Failed to fetch slot data: {str(e)}"}
+        return {}  # Return empty object instead of error
 
 # Verify dist directory exists before mounting
 if not os.path.exists(REACT_APP_PATH):
