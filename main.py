@@ -578,6 +578,26 @@ async def get_slot_data():
             logging.error(f"Error processing timings: {timing_error}")
             arrival_times = {}
         
+        # Extract relay bids and find the winning bid
+        winning_bid = None
+        try:
+            block_hash = slot_data.get("block", {}).get("execution_payload_block_hash")
+            relay_bids = slot_data.get("relay_bids", {})
+
+            if block_hash and relay_bids:
+                for relay_name, relay_data in relay_bids.items():
+                    bids = relay_data.get("bids", [])
+                    for bid in bids:
+                        if bid.get("block_hash") == block_hash:
+                            bid["relay_name"] = relay_name
+                            winning_bid = bid
+                            break
+                    if winning_bid:
+                        break
+        except Exception as bid_error:
+            logging.error(f"Error processing relay bids: {bid_error}")
+            winning_bid = None
+
         # Extract and return the relevant data from the slot response
         return {
             "slot": slot_data.get("slot"),
@@ -587,7 +607,8 @@ async def get_slot_data():
             "proposer": slot_data.get("proposer", {}),
             "entity": slot_data.get("entity"),
             "nodes_count": len(slot_data.get("nodes", {})) if slot_data.get("nodes") else 0,
-            "arrival_times": arrival_times
+            "arrival_times": arrival_times,
+            "winning_bid": winning_bid
         }
     except Exception as e:
         logging.error(f"Error getting slot data: {e}")

@@ -1,16 +1,10 @@
 import React, { useEffect, useState } from 'react';
 import axios from 'axios';
 import BaseLayout from '../../components/BaseLayout';
-import SlotHistory from '../../components/SlotHistory';
 
 interface BlockData {
   slot: number;
-  slot_start_date_time?: string;
-  epoch?: number;
-  proposer_index?: number;
-  execution_payload_transactions_count?: number;
-  execution_payload_gas_used?: number;
-  execution_payload_gas_limit?: number;
+  execution_payload_block_hash?: string;
 }
 
 interface ProposerData {
@@ -18,19 +12,22 @@ interface ProposerData {
   proposer_validator_index?: number;
 }
 
+interface WinningBid {
+  relay_name?: string;
+  value?: string;
+  slot_time?: number;
+  builder_pubkey?: string;
+}
+
 interface SlotData {
   slot?: number;
-  network?: string;
-  processed_at?: string;
   block?: BlockData;
   proposer?: ProposerData;
   entity?: string;
-  nodes_count?: number;
   arrival_times?: {
     min_arrival_time?: number;
-    max_arrival_time?: number;
-    nodes_count?: number;
   };
+  winning_bid?: WinningBid;
   error?: string;
 }
 
@@ -59,40 +56,58 @@ function SlotView() {
     return `${time}ms`;
   };
 
-  const getGasUtilization = () => {
-    if (!slotData?.block?.execution_payload_gas_used || !slotData?.block?.execution_payload_gas_limit) {
-      return 0;
+  const formatEthValue = (value?: string) => {
+    if (!value) return '0';
+    
+    // Value is likely a large integer string representing wei
+    try {
+      // Convert to ETH (divide by 10^18) and format to 4 decimal places
+      const valueInWei = BigInt(value);
+      const eth = Number(valueInWei) / 1e18;
+      
+      if (eth < 0.01) {
+        return `${eth.toFixed(4)} ETH`;
+      } else {
+        return `${eth.toFixed(2)} ETH`;
+      }
+    } catch (error) {
+      return value;
     }
-    return Math.floor((slotData.block.execution_payload_gas_used / slotData.block.execution_payload_gas_limit) * 100);
   };
 
   return (
     <BaseLayout title="SLOT">
-      <SlotHistory />
-      
       {slotData && !slotData.error ? (
         <div style={{
           position: 'absolute',
-          top: '20px',
+          top: '15px',
           left: '2px',
           display: 'flex',
           flexDirection: 'column',
-          gap: '0px',
-          lineHeight: '9px',
+          gap: '1px',
+          lineHeight: '11px',
           fontSize: '8px',
           fontFamily: '"Pixelify Sans", monospace',
           whiteSpace: 'pre',
           color: '#00ff00'
         }}>
           <div>
-            {slotData.slot}
+            #{slotData.slot}
           </div>
+          
+          {/* Proposer entity */}
           <div>
-            {slotData.block?.epoch || 'N/A'}
+            {slotData.entity || 'unknown'}
           </div>
-          <div>
-            {slotData.block?.execution_payload_transactions_count || 'N/A'} TX
-          </div>
+          
+          {/* Bid value */}
+          {slotData.winning_bid && (
+            <div>
+              {formatEthValue(slotData.winning_bid.value)}
+            </div>
+          )}
+          
+          {/* Arrival time */}
           <div>
             {getArrivalTime(slotData.arrival_times?.min_arrival_time)}
           </div>
