@@ -1,0 +1,50 @@
+[build-system]
+requires = ["setuptools>=42", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "beacon-divoom"
+version = "0.1.0"
+description = "A display interface for Ethereum beacon chain status using a Divoom device"
+readme = "README.md"
+requires-python = ">=3.8,<3.13"
+license = {text = "MIT"}
+authors = [
+    {name = "samcm"}
+]
+dependencies = [
+    "aiohttp==3.9.3",
+    "python-dotenv==1.0.0",
+    "fastapi==0.104.1",
+    "uvicorn==0.24.0",
+    "httpx==0.25.1",
+    "playwright>=1.39.0",
+    "Pillow==10.1.0",
+    "requests==2.31.0",
+    "tqdm==4.66.1",
+    "pandas==2.1.3",
+    "pyarrow==14.0.1",
+    "numpy==1.26.0",
+    "SQLAlchemy==1.4.50",
+]
+
+[project.optional-dependencies]
+dev = [
+    "pytest>=7.0.0",
+    "black>=23.0.0",
+    "isort>=5.0.0",
+]
+
+[tool.setuptools]
+packages = ["beacon_divoom"]
+
+[tool.black]
+line-length = 88
+target-version = ["py38"]
+
+[tool.isort]
+profile = "black"
+line_length = 88
+
+[tool.pytest]
+testpaths = ["tests"]

@@ -76,16 +76,61 @@ The `beacon-divoom` project is a system that displays Ethereum beacon chain and 
 
 ## Development Workflow
 
-### Running the Application
+### System Requirements
 
-1. Configure environment variables (see Configuration section)
-2. Build the frontend:
+- Python 3.8 to 3.12 (Python 3.13+ is not supported due to compatibility issues with dependencies)
+- Node.js for frontend development
+
+### Installing Dependencies and Running the Application
+
+1. Use the provided scripts for setup and running:
+
    ```bash
-   cd ui
-   npm install
-   npm run build
+   # First time setup (installs dependencies)
+   ./setup.sh
+   
+   # Build the frontend
+   cd ui && npm install && npm run build
+   
+   # Run the application (always use this script)
+   ./run.sh
    ```
-3. Run the backend:
+
+   The `run.sh` script ensures that the virtual environment is properly activated before running the application.
+
+### Manual Installation with uv
+
+If you prefer a manual setup:
+
+1. Install uv if you haven't already:
+   ```bash
+   pip install uv
+   ```
+
+2. Create and activate a virtual environment:
+   ```bash
+   uv venv .venv
+   source .venv/bin/activate  # On Unix/macOS
+   # OR
+   .venv\Scripts\activate  # On Windows
+   ```
+
+3. Install dependencies:
+   ```bash
+   uv pip install -r requirements.txt
+   ```
+
+4. Install Playwright browser:
+   ```bash
+   python -m playwright install chromium
+   ```
+
+5. Build the frontend:
+   ```bash
+   cd ui && npm install && npm run build
+   ```
+
+6. Run the application (with the virtual environment activated):
    ```bash
    python main.py
    ```
@@ -166,10 +211,17 @@ Modify `update_screenshot_cache()` or `update_display()` in `main.py` to change 
 
 ### Common Issues
 
-- Ensure the beacon node is accessible and configured correctly
-- Check that the Divoom API endpoint is responding
-- Verify that the React app is built (`npm run build` in the ui directory)
-- For development mode, ensure the React dev server is running
+- **Missing Dependencies**: Always use `./run.sh` to run the application to ensure the virtual environment is activated
+- **Environment Variables**: Make sure all required environment variables are set before running
+- **Frontend Build**: Ensure the React app is built (`cd ui && npm run build`) before running in production mode
+- **Python Version**: Use Python 3.8-3.12 (not 3.13+) due to dependency compatibility issues
+
+### Dependency Issues
+
+- If using uv, make sure you're using a compatible Python version (3.8-3.12)
+- Ensure your virtual environment is activated when running the application
+- If you encounter module errors, check that all dependencies are installed: `uv pip list`
+- The project uses SQLAlchemy 1.4.x to avoid greenlet compatibility issues
 
 ### Logging
 
