@@ -2,6 +2,7 @@ import os
 import asyncio
 from beacon_client import BeaconClient
 from divoom_client import DivoomClient
+from slot_client import SlotClient
 from fastapi import FastAPI, Response, Body
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
@@ -61,7 +62,7 @@ class View:
     refresh_interval: float  # In seconds, 0 means no refresh
     description: Optional[str] = None
 
-ENABLED_VIEWS = os.getenv('ENABLED_VIEWS', 'proposer,overview,execution,layer2').split(',')
+ENABLED_VIEWS = os.getenv('ENABLED_VIEWS', 'proposer,overview,execution,layer2,mev').split(',')
 
 VIEWS = {
     "proposer": View(
@@ -91,6 +92,13 @@ VIEWS = {
         needs_refresh=True,
         refresh_interval=0.1,
         description="Layer 2 metrics"
+    ),
+    "mev": View(
+        name="mev",
+        enabled="mev" in ENABLED_VIEWS,
+        needs_refresh=False,
+        refresh_interval=4,  # Refresh every slot
+        description="MEV data from ethpandaops lab"
     )
 }
 
@@ -135,6 +143,7 @@ class ViewRotation:
 
 # Add to the global variables
 l2_tracker = L2MetricsTracker()
+slot_client = SlotClient()
 screenshot_cache = None
 browser_lock = asyncio.Lock()
 playwright = None
@@ -256,6 +265,10 @@ async def lifespan(app: FastAPI):
     # Start L2 tracker
     await l2_tracker.start()
     
+    # Initialize slot client and fetch initial data
+    asyncio.create_task(slot_client.get_slot_data())
+    print("Initialized slot client")
+    
     # Start display update task
     asyncio.create_task(update_display())
     
@@ -328,12 +341,12 @@ def download_validator_mapping():
 async def handle_head_event(event_data: Dict):
     """Handle new head events by updating the display and cache"""
     slot = int(event_data.get('slot', 0))
-    
+
     # Fetch and cache the new block
     asyncio.create_task(beacon_client.get_block(slot))
-    
+
     current_view = view_rotation.get_current_view()
-    if current_view and current_view.name in ["overview", "execution", "proposer"]:
+    if current_view and current_view.name in ["overview", "execution", "proposer", "mev"]:
         try:
             screenshot = await capture_react_page()
             if screenshot:
@@ -343,10 +356,9 @@ async def handle_head_event(event_data: Dict):
 
 async def handle_slot_change(slot_data: Dict):
     """Handle slot changes by updating the Divoom display"""
-    if view_rotation.get_current_view() == "overview" or \
-       view_rotation.get_current_view() == "execution" or \
-       view_rotation.get_current_view() == "proposer":
-        print(f"Re-rendering display for slot {slot_data['slot']}")
+    current_view = view_rotation.get_current_view()
+    if current_view and current_view.name in ["overview", "execution", "proposer", "mev"]:
+        print(f"Re-rendering display for slot {slot_data['slot']} on view {current_view.name}")
         try:
             screenshot = await capture_react_page()
             await divoom_client.update_display(screenshot)
@@ -530,6 +542,123 @@ async def get_l2_metrics():
         ],
         "is_connected": l2_tracker.get_connection_status()
     }
+
+@app.get("/api/slot")
+async def get_slot_data():
+    """Get current slot data from ethpandaops lab"""
+    try:
+        # This will either return cached data or fetch new data if needed
+        slot_data = await slot_client.get_slot_data()
+
+        if not slot_data:
+            return {"error": "Failed to fetch slot data"}
+
+        # Extract winning bid
+        winning_bid = None
+        try:
+            block_hash = slot_data.get("block", {}).get("execution_payload_block_hash")
+            relay_bids = slot_data.get("relay_bids", {})
+
+            if block_hash and relay_bids:
+                for relay_name, relay_data in relay_bids.items():
+                    bids = relay_data.get("bids", [])
+                    for bid in bids:
+                        if bid.get("block_hash") == block_hash:
+                            bid["relay_name"] = relay_name
+                            winning_bid = bid
+                            break
+                    if winning_bid:
+                        break
+        except Exception as bid_error:
+            logging.error(f"Error processing relay bids: {bid_error}")
+            winning_bid = None
+
+        # Get arrival times (already extracted in slot_client, but cached here)
+        arrival_times = slot_client._extract_arrival_times(slot_data)
+
+        # Get slot history (already pre-processed from raw payloads)
+        slot_history = slot_client.get_slot_history()
+
+        # Generate bid history statistics
+        bid_stats = {}
+        if slot_history and len(slot_history) > 1:
+            try:
+                # Extract bids from history
+                bid_values = []
+                for entry in slot_history:
+                    if entry.get("bid_value"):
+                        try:
+                            wei = int(entry["bid_value"])
+                            eth = wei / 1e18
+                            bid_values.append(eth)
+                        except:
+                            continue
+
+                if bid_values and len(bid_values) > 1:
+                    bid_stats = {
+                        "highest": max(bid_values),
+                        "lowest": min(bid_values),
+                        "average": sum(bid_values) / len(bid_values),
+                        "count": len(bid_values)
+                    }
+
+                    # Calculate trend for bids (positive is increasing, negative is decreasing)
+                    if len(bid_values) >= 3:
+                        recent = bid_values[-3:]
+                        oldest = recent[0]
+                        newest = recent[-2]
+                        bid_stats["trend"] = newest - oldest
+                        bid_stats["trend_pct"] = (newest - oldest) / oldest * 100 if oldest > 0 else 0
+            except Exception as stats_error:
+                logging.error(f"Error calculating bid statistics: {stats_error}")
+
+        # Calculate arrival time history statistics if available
+        arrival_stats = {}
+        if slot_history and len(slot_history) > 1:
+            try:
+                # Extract arrival times from history
+                history_times = []
+                for entry in slot_history:
+                    time_val = entry.get("arrival_times", {}).get("fastest_time")
+                    if time_val is not None:
+                        history_times.append(time_val)
+
+                if history_times:
+                    history_times.sort()
+                    arrival_stats = {
+                        "fastest": min(history_times),
+                        "slowest": max(history_times),
+                        "average": sum(history_times) / len(history_times),
+                        "median": history_times[len(history_times) // 2],
+                        "count": len(history_times)
+                    }
+
+                    # Calculate trend (negative is improving/faster, positive is degrading/slower)
+                    if len(history_times) >= 4:
+                        recent = history_times[-4:]
+                        oldest = recent[0]
+                        newest = recent[-1]
+                        arrival_stats["trend"] = newest - oldest
+                        arrival_stats["trend_pct"] = (newest - oldest) / oldest * 100 if oldest > 0 else 0
+            except Exception as stats_error:
+                logging.error(f"Error calculating arrival statistics: {stats_error}")
+
+        # Return the processed data
+        return {
+            "slot": slot_data.get("slot"),
+            "network": slot_data.get("network"),
+            "entity": slot_data.get("entity"),
+            "arrival_times": arrival_times,
+            "winning_bid": winning_bid,
+            "slot_history": slot_history,
+            "arrival_stats": arrival_stats,
+            "bid_stats": bid_stats
+        }
+    except Exception as e:
+        logging.error(f"Error getting slot data: {e}")
+        import traceback
+        traceback.print_exc()
+        return {"error": f"Failed to fetch slot data: {str(e)}"}
 
 # Verify dist directory exists before mounting
 if not os.path.exists(REACT_APP_PATH):

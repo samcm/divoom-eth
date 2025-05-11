@@ -55,4 +55,21 @@ export interface ArrivalTimesResponse {
   seconds_per_slot: number;
 }
 
+export interface ViewInfo {
+  name: string;
+  refreshInterval: number;
+  needsRefresh: boolean;
+  description: string | null;
+}
+
+export interface ViewOverride {
+  view: string | null;
+  until: string | null;
+}
+
+export interface ViewsResponse {
+  views: ViewInfo[];
+  currentOverride: ViewOverride;
+}
+
 // ... rest of the interfaces ... 
