@@ -11,8 +11,7 @@ interface YieldPool {
 }
 
 function DefiYields() {
-  const [yields, setYields] = useState<YieldPool[]>([]);
-  const [avgApy, setAvgApy] = useState(0);
+  const [selectedYield, setSelectedYield] = useState<YieldPool | null>(null);
   const [loading, setLoading] = useState(true);
 
   const baseUrl = window.location.origin;
@@ -23,12 +22,14 @@ function DefiYields() {
         const response = await axios.get(`${baseUrl}/api/defillama/yields`);
         const data = response.data || [];
         
-        setYields(data.slice(0, 6)); // Top 6 for space
+        // Filter out unrealistic APYs (over 1000% are likely farming rewards or bugs)
+        const filteredYields = data.filter((pool: YieldPool) => pool.apy > 0 && pool.apy < 1000);
         
-        // Calculate average APY
-        if (data.length > 0) {
-          const totalApy = data.reduce((sum: number, pool: YieldPool) => sum + pool.apy, 0);
-          setAvgApy(totalApy / data.length);
+        // Pick a random yield from top 10 reasonable yields
+        if (filteredYields.length > 0) {
+          const topYields = filteredYields.slice(0, 10);
+          const randomYield = topYields[Math.floor(Math.random() * topYields.length)];
+          setSelectedYield(randomYield);
         }
         
         setLoading(false);
@@ -78,7 +79,7 @@ function DefiYields() {
           fontWeight: 'bold',
           marginBottom: '2px',
         }}>
-          {yields.length > 0 ? yields[0].apy.toFixed(1) : avgApy.toFixed(1)}%
+          {selectedYield ? selectedYield.apy.toFixed(1) : '0.0'}%
         </div>
         <div style={{
           color: '#888',
@@ -90,17 +91,21 @@ function DefiYields() {
       </div>
 
 
-      {/* Top Protocol */}
-      {yields.length > 0 && (
+      {/* Random Protocol */}
+      {selectedYield && (
         <div style={{
           position: 'absolute',
           bottom: '2px',
-          left: '2px',
+          left: '0px',
+          right: '0px',
           color: '#aaa',
           fontSize: '6px',
           fontFamily: '"Pixelify Sans", monospace',
+          textAlign: 'center',
+          backgroundColor: 'rgba(0,0,0,0.3)',
+          padding: '1px 2px',
         }}>
-          {yields[0].protocol.slice(0, 6)}
+          {selectedYield.protocol.slice(0, 8)} • {selectedYield.symbol.slice(0, 4)}
         </div>
       )}
     </BaseLayout>

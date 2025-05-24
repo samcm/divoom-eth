@@ -83,17 +83,21 @@ function DefiVolume() {
       </div>
 
 
-      {/* Top DEX */}
+      {/* Random DEX */}
       {dexes.length > 0 && (
         <div style={{
           position: 'absolute',
           bottom: '2px',
-          left: '2px',
+          left: '0px',
+          right: '0px',
           color: '#aaa',
           fontSize: '6px',
           fontFamily: '"Pixelify Sans", monospace',
+          textAlign: 'center',
+          backgroundColor: 'rgba(0,0,0,0.3)',
+          padding: '1px 2px',
         }}>
-          {dexes[0].name.slice(0, 6)}
+          {dexes[Math.floor(Math.random() * Math.min(dexes.length, 3))].name.slice(0, 10)}
         </div>
       )}
     </BaseLayout>
