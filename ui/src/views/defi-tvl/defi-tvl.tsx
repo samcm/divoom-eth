@@ -56,106 +56,68 @@ function DefiTvl() {
 
   return (
     <BaseLayout title="DeFi TVL">
+      {/* Large TVL Display */}
       <div style={{
-        width: '100%',
-        height: '54px', // Reserve space for title
-        position: 'relative',
-        top: '2px',
+        position: 'absolute',
+        top: '50%',
+        left: '50%',
+        transform: 'translate(-50%, -50%)',
+        textAlign: 'center',
       }}>
-        {/* Total TVL Header */}
         <div style={{
-          display: 'flex',
-          justifyContent: 'space-between',
-          alignItems: 'center',
-          height: '8px',
-          backgroundColor: 'rgba(0, 100, 200, 0.3)',
-          padding: '0 1px',
-          marginBottom: '1px',
+          color: '#00ff88',
+          fontSize: '12px',
+          fontFamily: '"Pixelify Sans", monospace',
+          fontWeight: 'bold',
+          marginBottom: '2px',
         }}>
-          <span style={{
-            color: 'rgb(100, 150, 255)',
-            fontSize: '7px',
-            fontFamily: '"Pixelify Sans", monospace',
-          }}>
-            ETH TVL
-          </span>
-          <span style={{
-            color: 'rgb(100, 255, 100)',
-            fontSize: '7px',
-            fontFamily: '"Pixelify Sans", monospace',
-            fontWeight: 'bold',
-          }}>
-            ${(totalTvl / 1e9).toFixed(1)}B
-          </span>
+          ${(totalTvl / 1e9).toFixed(0)}B
         </div>
-        
-        {/* Protocol List */}
         <div style={{
-          display: 'flex',
-          flexDirection: 'column',
-          gap: '1px',
-          height: '44px',
-          overflow: 'hidden',
+          color: '#888',
+          fontSize: '8px',
+          fontFamily: '"Pixelify Sans", monospace',
         }}>
-          {protocols.map((protocol, idx) => (
-            <div key={idx} style={{
-              display: 'flex',
-              justifyContent: 'space-between',
-              alignItems: 'center',
-              height: '7px',
-              padding: '0 1px',
-            }}>
-              <div style={{
-                display: 'flex',
-                alignItems: 'center',
-                gap: '1px',
-                overflow: 'hidden',
-                maxWidth: '30px',
-              }}>
-                <div style={{
-                  width: '2px',
-                  height: '1px',
-                  borderRadius: '1px',
-                  background: 'linear-gradient(to right, rgb(100, 150, 255), rgb(150, 100, 255))',
-                }} />
-                <span style={{
-                  color: '#fff',
-                  fontSize: '7px',
-                  fontFamily: '"Pixelify Sans", monospace',
-                  overflow: 'hidden',
-                  textOverflow: 'ellipsis',
-                  whiteSpace: 'nowrap',
-                  maxWidth: '26px',
-                }}>
-                  {protocol.name.slice(0, 8)}
-                </span>
-              </div>
-              <div style={{
-                display: 'flex',
-                alignItems: 'center',
-                gap: '1px',
-              }}>
-                <span style={{
-                  color: 'rgb(200, 200, 200)',
-                  fontSize: '7px',
-                  fontFamily: '"Pixelify Sans", monospace',
-                }}>
-                  ${(protocol.tvl / 1e9).toFixed(1)}B
-                </span>
-                <span style={{
-                  color: protocol.change_1d >= 0 ? 'rgb(100, 255, 100)' : 'rgb(255, 100, 100)',
-                  fontSize: '6px',
-                  fontFamily: '"Pixelify Sans", monospace',
-                  minWidth: '12px',
-                  textAlign: 'right',
-                }}>
-                  {protocol.change_1d >= 0 ? '+' : ''}{protocol.change_1d.toFixed(1)}%
-                </span>
-              </div>
-            </div>
-          ))}
+          ETH DEFI
         </div>
       </div>
+
+      {/* DeFi Icon */}
+      <div style={{
+        position: 'absolute',
+        bottom: '2px',
+        right: '2px',
+        width: '12px',
+        height: '12px',
+        backgroundColor: '#00ff88',
+        borderRadius: '2px',
+        display: 'flex',
+        alignItems: 'center',
+        justifyContent: 'center',
+      }}>
+        <div style={{
+          color: '#000',
+          fontSize: '8px',
+          fontFamily: '"Pixelify Sans", monospace',
+          fontWeight: 'bold',
+        }}>
+          Ð
+        </div>
+      </div>
+
+      {/* Top Protocol */}
+      {protocols.length > 0 && (
+        <div style={{
+          position: 'absolute',
+          bottom: '2px',
+          left: '2px',
+          color: '#aaa',
+          fontSize: '6px',
+          fontFamily: '"Pixelify Sans", monospace',
+        }}>
+          #{protocols[0].name.slice(0, 6)}
+        </div>
+      )}
     </BaseLayout>
   );
 }

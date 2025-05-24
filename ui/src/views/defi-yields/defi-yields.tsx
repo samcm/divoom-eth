@@ -63,120 +63,68 @@ function DefiYields() {
 
   return (
     <BaseLayout title="DeFi Yields">
+      {/* Large APY Display */}
       <div style={{
-        width: '100%',
-        height: '54px',
-        position: 'relative',
-        top: '2px',
+        position: 'absolute',
+        top: '50%',
+        left: '50%',
+        transform: 'translate(-50%, -50%)',
+        textAlign: 'center',
       }}>
-        {/* Average APY Header */}
         <div style={{
-          display: 'flex',
-          justifyContent: 'space-between',
-          alignItems: 'center',
-          height: '8px',
-          backgroundColor: 'rgba(0, 150, 0, 0.3)',
-          padding: '0 1px',
-          marginBottom: '1px',
+          color: '#ffff00',
+          fontSize: '12px',
+          fontFamily: '"Pixelify Sans", monospace',
+          fontWeight: 'bold',
+          marginBottom: '2px',
         }}>
-          <span style={{
-            color: 'rgb(100, 255, 100)',
-            fontSize: '7px',
-            fontFamily: '"Pixelify Sans", monospace',
-          }}>
-            Avg APY
-          </span>
-          <span style={{
-            color: 'rgb(255, 255, 100)',
-            fontSize: '7px',
-            fontFamily: '"Pixelify Sans", monospace',
-            fontWeight: 'bold',
-          }}>
-            {avgApy.toFixed(1)}%
-          </span>
+          {yields.length > 0 ? yields[0].apy.toFixed(1) : avgApy.toFixed(1)}%
         </div>
-        
-        {/* Yields List */}
         <div style={{
-          display: 'flex',
-          flexDirection: 'column',
-          gap: '1px',
-          height: '44px',
-          overflow: 'hidden',
+          color: '#888',
+          fontSize: '8px',
+          fontFamily: '"Pixelify Sans", monospace',
         }}>
-          {yields.map((pool, idx) => (
-            <div key={idx} style={{
-              display: 'flex',
-              justifyContent: 'space-between',
-              alignItems: 'center',
-              height: '7px',
-              padding: '0 1px',
-            }}>
-              <div style={{
-                display: 'flex',
-                alignItems: 'center',
-                gap: '1px',
-                overflow: 'hidden',
-                maxWidth: '24px',
-              }}>
-                {pool.stable && (
-                  <div style={{
-                    width: '1px',
-                    height: '1px',
-                    borderRadius: '50%',
-                    backgroundColor: 'rgb(100, 150, 255)',
-                  }} />
-                )}
-                <span style={{
-                  color: '#fff',
-                  fontSize: '7px',
-                  fontFamily: '"Pixelify Sans", monospace',
-                  overflow: 'hidden',
-                  textOverflow: 'ellipsis',
-                  whiteSpace: 'nowrap',
-                  maxWidth: '16px',
-                }}>
-                  {pool.protocol.slice(0, 6)}
-                </span>
-                <span style={{
-                  color: 'rgb(150, 150, 150)',
-                  fontSize: '6px',
-                  fontFamily: '"Pixelify Sans", monospace',
-                  maxWidth: '6px',
-                  overflow: 'hidden',
-                }}>
-                  {pool.symbol.slice(0, 3)}
-                </span>
-              </div>
-              <div style={{
-                display: 'flex',
-                alignItems: 'center',
-                gap: '1px',
-              }}>
-                <span style={{
-                  color: 'rgb(255, 255, 100)',
-                  fontSize: '7px',
-                  fontFamily: '"Pixelify Sans", monospace',
-                  fontWeight: 'bold',
-                  minWidth: '16px',
-                  textAlign: 'right',
-                }}>
-                  {pool.apy.toFixed(1)}%
-                </span>
-                <span style={{
-                  color: 'rgb(150, 150, 150)',
-                  fontSize: '6px',
-                  fontFamily: '"Pixelify Sans", monospace',
-                  minWidth: '8px',
-                  textAlign: 'right',
-                }}>
-                  ${(pool.tvl_usd / 1e6).toFixed(1)}M
-                </span>
-              </div>
-            </div>
-          ))}
+          TOP APY
         </div>
       </div>
+
+      {/* Yield Icon */}
+      <div style={{
+        position: 'absolute',
+        bottom: '2px',
+        right: '2px',
+        width: '12px',
+        height: '12px',
+        backgroundColor: '#ffff00',
+        borderRadius: '2px',
+        display: 'flex',
+        alignItems: 'center',
+        justifyContent: 'center',
+      }}>
+        <div style={{
+          color: '#000',
+          fontSize: '8px',
+          fontFamily: '"Pixelify Sans", monospace',
+          fontWeight: 'bold',
+        }}>
+          %
+        </div>
+      </div>
+
+      {/* Top Protocol */}
+      {yields.length > 0 && (
+        <div style={{
+          position: 'absolute',
+          bottom: '2px',
+          left: '2px',
+          color: '#aaa',
+          fontSize: '6px',
+          fontFamily: '"Pixelify Sans", monospace',
+        }}>
+          {yields[0].protocol.slice(0, 6)}
+        </div>
+      )}
     </BaseLayout>
   );
 }
