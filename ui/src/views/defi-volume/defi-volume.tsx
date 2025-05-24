@@ -82,28 +82,6 @@ function DefiVolume() {
         </div>
       </div>
 
-      {/* Volume Icon */}
-      <div style={{
-        position: 'absolute',
-        bottom: '2px',
-        right: '2px',
-        width: '12px',
-        height: '12px',
-        backgroundColor: '#00ffff',
-        borderRadius: '2px',
-        display: 'flex',
-        alignItems: 'center',
-        justifyContent: 'center',
-      }}>
-        <div style={{
-          color: '#000',
-          fontSize: '8px',
-          fontFamily: '"Pixelify Sans", monospace',
-          fontWeight: 'bold',
-        }}>
-          $
-        </div>
-      </div>
 
       {/* Top DEX */}
       {dexes.length > 0 && (
