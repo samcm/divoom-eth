@@ -9,6 +9,7 @@ The application is configured using environment variables:
 - `BEACON_NODE_URL`: URL of the beacon node (required)
 - `VALIDATOR_INDEXES`: Comma-separated list of validator indexes to monitor (required)
 - `DIVOOM_API_ENDPOINT`: URL of the Divoom API endpoint (required)
+- `DIVOOM_REQUEST_INTERVAL_SECONDS`: Minimum seconds between Divoom API requests (default: 5)
 - `PORT`: Port to run the server on (default: 8000)
 - `HOST`: Host to bind the server to (default: 0.0.0.0)
 

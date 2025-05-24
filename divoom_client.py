@@ -5,13 +5,14 @@ import io
 import time
 
 class DivoomClient:
-    def __init__(self, api_endpoint: str):
+    def __init__(self, api_endpoint: str, request_interval_seconds: int = 5):
         self.api_endpoint = api_endpoint
+        self.request_interval_seconds = request_interval_seconds
         self.last_update = 0
 
     async def update_display(self, image_data: bytes, x: int = 0, y: int = 0, push_immediately: bool = True):
         now = time.time()
-        if now - self.last_update < 15:
+        if now - self.last_update < self.request_interval_seconds:
             return
             
         # Convert bytes to PIL Image

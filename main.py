@@ -45,6 +45,7 @@ PORT = int(os.getenv('PORT', '8000'))
 MODE = os.getenv('MODE', 'production')
 REACT_DEV_SERVER = "http://localhost:5173" if MODE == 'development' else None
 VIEW_INTERVAL_MINUTES = int(os.getenv('VIEW_INTERVAL_MINUTES', '10'))
+DIVOOM_REQUEST_INTERVAL_SECONDS = int(os.getenv('DIVOOM_REQUEST_INTERVAL_SECONDS', '5'))
 
 # Validate configuration
 if not BEACON_NODE_URL:
@@ -295,7 +296,7 @@ app.add_middleware(
 )
 
 beacon_client = BeaconClient(BEACON_NODE_URL, VALIDATOR_INDEXES)
-divoom_client = DivoomClient(DIVOOM_API_ENDPOINT)
+divoom_client = DivoomClient(DIVOOM_API_ENDPOINT, DIVOOM_REQUEST_INTERVAL_SECONDS)
 validator_gadget = ValidatorGadget()
 view_rotation = ViewRotation(VIEWS, VIEW_INTERVAL_MINUTES)
 
