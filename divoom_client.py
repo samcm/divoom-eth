@@ -5,7 +5,7 @@ import io
 import time
 
 class DivoomClient:
-    def __init__(self, api_endpoint: str, request_interval_seconds: int = 5):
+    def __init__(self, api_endpoint: str, request_interval_seconds: int = 30):
         self.api_endpoint = api_endpoint
         self.request_interval_seconds = request_interval_seconds
         self.last_update = 0
