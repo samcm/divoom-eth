@@ -26,6 +26,7 @@ import json
 from typing import Dict, List, Optional
 from dataclasses import dataclass
 from l2_metrics import L2MetricsTracker
+from defillama_client import DeFiLlamaClient
 
 logging.basicConfig(
     level=logging.INFO,
@@ -63,7 +64,7 @@ class View:
     refresh_interval: float  # In seconds, 0 means no refresh
     description: Optional[str] = None
 
-ENABLED_VIEWS = os.getenv('ENABLED_VIEWS', 'proposer,overview,execution,layer2,mev').split(',')
+ENABLED_VIEWS = os.getenv('ENABLED_VIEWS', 'proposer,overview,execution,layer2,mev,defi-tvl,defi-yields,defi-volume').split(',')
 
 VIEWS = {
     "proposer": View(
@@ -100,6 +101,27 @@ VIEWS = {
         needs_refresh=False,
         refresh_interval=4,  # Refresh every slot
         description="MEV data from ethpandaops lab"
+    ),
+    "defi-tvl": View(
+        name="defi-tvl",
+        enabled="defi-tvl" in ENABLED_VIEWS,
+        needs_refresh=False,
+        refresh_interval=60,  # 1 minute
+        description="DeFi protocols TVL overview"
+    ),
+    "defi-yields": View(
+        name="defi-yields",
+        enabled="defi-yields" in ENABLED_VIEWS,
+        needs_refresh=False,
+        refresh_interval=120,  # 2 minutes
+        description="DeFi yield opportunities"
+    ),
+    "defi-volume": View(
+        name="defi-volume",
+        enabled="defi-volume" in ENABLED_VIEWS,
+        needs_refresh=False,
+        refresh_interval=90,  # 1.5 minutes
+        description="DEX volume and activity"
     )
 }
 
@@ -283,6 +305,7 @@ async def lifespan(app: FastAPI):
     await cleanup_browser()
     await l2_tracker.stop()
     await slot_client.stop()
+    await defillama_client.close()
 
 app = FastAPI(lifespan=lifespan)
 
@@ -298,6 +321,7 @@ app.add_middleware(
 beacon_client = BeaconClient(BEACON_NODE_URL, VALIDATOR_INDEXES)
 divoom_client = DivoomClient(DIVOOM_API_ENDPOINT, DIVOOM_REQUEST_INTERVAL_SECONDS)
 validator_gadget = ValidatorGadget()
+defillama_client = DeFiLlamaClient()
 view_rotation = ViewRotation(VIEWS, VIEW_INTERVAL_MINUTES)
 
 async def update_display():
@@ -661,6 +685,62 @@ async def get_slot_data():
         import traceback
         traceback.print_exc()
         return {}  # Return empty object instead of error
+
+# DeFiLlama API endpoints
+@app.get("/api/defillama/protocols")
+async def get_ethereum_protocols():
+    """Get top Ethereum DeFi protocols by TVL"""
+    try:
+        protocols = await defillama_client.get_ethereum_protocols()
+        return [
+            {
+                "name": p.name,
+                "tvl": p.tvl,
+                "change_1d": p.change_1d,
+                "category": p.category
+            }
+            for p in protocols
+        ]
+    except Exception as e:
+        logging.error(f"Failed to fetch protocols: {e}")
+        return []
+
+@app.get("/api/defillama/yields")
+async def get_ethereum_yields():
+    """Get top yield opportunities on Ethereum"""
+    try:
+        yields = await defillama_client.get_top_yields()
+        return [
+            {
+                "protocol": y.protocol,
+                "symbol": y.symbol,
+                "apy": y.apy,
+                "tvl_usd": y.tvl_usd,
+                "stable": y.stable
+            }
+            for y in yields
+        ]
+    except Exception as e:
+        logging.error(f"Failed to fetch yields: {e}")
+        return []
+
+@app.get("/api/defillama/volumes")
+async def get_ethereum_volumes():
+    """Get DEX volume data for Ethereum"""
+    try:
+        volumes = await defillama_client.get_dex_volumes()
+        return [
+            {
+                "name": v.name,
+                "volume_24h": v.volume_24h,
+                "change_24h": v.change_24h,
+                "fees_24h": v.fees_24h
+            }
+            for v in volumes
+        ]
+    except Exception as e:
+        logging.error(f"Failed to fetch volumes: {e}")
+        return []
 
 # Verify dist directory exists before mounting
 if not os.path.exists(REACT_APP_PATH):
