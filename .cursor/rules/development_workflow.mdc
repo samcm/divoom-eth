@@ -1,0 +1,216 @@
+---
+description: Beacon-Divoom Development Workflow and Processes
+globs: ["*.yml", "*.yaml", "Dockerfile", "*.sh", "package.json", "pyproject.toml", "requirements.txt"]
+alwaysApply: false
+---
+
+# Beacon-Divoom Development Workflow
+
+## Environment Setup
+
+### Prerequisites
+- Python 3.8-3.12 (NOT 3.13+ due to dependency compatibility)
+- Node.js for frontend development
+- uv package manager for Python dependencies
+- Docker (optional, for containerized deployment)
+
+### Initial Setup
+```bash
+# Use provided setup script
+./setup.sh
+
+# Manual setup alternative
+uv venv .venv
+source .venv/bin/activate  # Unix/macOS
+uv pip install -r requirements.txt
+python -m playwright install chromium
+
+# Frontend setup
+cd ui && npm install && npm run build
+```
+
+### Running the Application
+```bash
+# Always use the run script to ensure proper environment
+./run.sh
+
+# Manual run (ensure .venv is activated)
+python main.py
+```
+
+## Development Modes
+
+### Production Mode (Default)
+- Serves built React frontend from `ui/dist`
+- Optimized for deployment
+- Screenshot capture for Divoom display
+
+### Development Mode
+```bash
+MODE=development python main.py
+```
+- Proxies to React dev server
+- Hot reloading for frontend changes
+- Faster iteration cycles
+
+## Git Workflow
+
+### Branch Strategy
+- `master`: Main development branch
+- Feature branches: `feature/description`
+- Hotfix branches: `hotfix/description`
+
+### Commit Standards
+- Use conventional commit format when possible
+- Include clear, descriptive commit messages
+- Reference issues when applicable
+
+### Pull Request Process
+1. Create feature branch from master
+2. Implement changes following code standards
+3. Test changes thoroughly
+4. Create pull request with clear description
+5. Code review and approval
+6. Merge to master
+
+## Testing Strategy
+
+### Python Testing
+```bash
+# Run tests (when test suite exists)
+pytest
+pytest --cov=. --cov-report=html
+```
+
+### Frontend Testing
+```bash
+cd ui
+npm test
+npm run test:coverage
+```
+
+### Integration Testing
+- Test full display pipeline
+- Verify Divoom device integration
+- Test view rotation system
+- Validate beacon node connectivity
+
+## Build and Deployment
+
+### Local Development Build
+```bash
+# Frontend build
+cd ui && npm run build
+
+# Python environment
+./setup.sh
+```
+
+### Docker Deployment
+```bash
+# Build container
+docker build -t beacon-divoom .
+
+# Run container
+docker run -p 8000:8000 \
+  -e BEACON_NODE_URL=http://beacon-node:5052 \
+  -e VALIDATOR_INDEXES=123,456,789 \
+  -e DIVOOM_API_ENDPOINT=http://divoom-api:5000 \
+  beacon-divoom
+```
+
+### Environment Configuration
+Required environment variables:
+- `BEACON_NODE_URL`: Ethereum beacon node endpoint
+- `VALIDATOR_INDEXES`: Comma-separated validator indices
+- `DIVOOM_API_ENDPOINT`: Divoom device API endpoint
+
+Optional configuration:
+- `MODE`: production/development
+- `VIEW_INTERVAL_MINUTES`: View rotation interval (default: 10)
+- `ENABLED_VIEWS`: Active views (default: proposer,overview,execution,layer2)
+- `HOST`: Server host (default: 0.0.0.0)
+- `PORT`: Server port (default: 8000)
+
+## Quality Assurance
+
+### Code Quality Tools
+- Black (Python formatting)
+- Flake8 (Python linting)
+- ESLint (TypeScript/React linting)
+- Prettier (Frontend formatting)
+
+### Pre-commit Checks
+- Run formatters and linters
+- Type checking with mypy (Python) and tsc (TypeScript)
+- Import sorting and organization
+- Basic security checks
+
+### Performance Monitoring
+- Monitor API response times
+- Track memory usage in long-running processes
+- Verify display update frequency
+- Monitor connection stability
+
+## Debugging and Troubleshooting
+
+### Common Issues
+1. **Module Import Errors**: Ensure virtual environment is activated
+2. **Python Version Issues**: Use Python 3.8-3.12, not 3.13+
+3. **Frontend Build Issues**: Clear `node_modules` and reinstall
+4. **Display Pipeline Issues**: Check Playwright browser installation
+
+### Debugging Tools
+- Python: Use `logging` module, debugger, profiling tools
+- Frontend: Browser dev tools, React Developer Tools
+- Network: Monitor API calls and responses
+- System: Check resource usage and connections
+
+### Logging Configuration
+- Use structured logging in Python
+- Log levels: DEBUG, INFO, WARNING, ERROR
+- Include context in log messages
+- Monitor logs for error patterns
+
+## Dependency Management
+
+### Python Dependencies
+- Use `uv` for package management
+- Pin specific versions in `requirements.txt`
+- Regular security updates
+- Test compatibility before upgrading
+
+### Frontend Dependencies
+- Use npm for package management
+- Keep `package-lock.json` in version control
+- Regular security audits with `npm audit`
+- Update dependencies carefully due to display constraints
+
+## Continuous Integration
+
+### Automated Checks
+- Run tests on pull requests
+- Verify build success
+- Check code formatting and linting
+- Security vulnerability scanning
+
+### Deployment Pipeline
+- Automated builds on master branch
+- Container image creation and publishing
+- Integration testing with real endpoints
+- Rollback procedures for failed deployments
+
+## Documentation Updates
+
+### When to Update Documentation
+- New features or views added
+- Configuration changes
+- API endpoint modifications
+- Deployment procedure changes
+
+### Documentation Types
+- Code comments and docstrings
+- README updates
+- API documentation
+- Deployment guides
+- Troubleshooting guides

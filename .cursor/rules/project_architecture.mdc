@@ -1,0 +1,79 @@
+---
+description: Beacon-Divoom Project Architecture Rules
+alwaysApply: true
+---
+
+# Beacon-Divoom Project Architecture
+
+## Overview
+The beacon-divoom project is a real-time Ethereum beacon chain monitoring system that displays validator and network metrics on a Divoom pixel display device. It consists of a Python FastAPI backend, React frontend for visualization, and hardware integration with Divoom devices.
+
+## Architecture Components
+
+### Backend Services (Python)
+- **main.py**: FastAPI application entry point, view rotation management, screenshot capture
+- **beacon_client.py**: Ethereum beacon node API client, real-time event subscriptions
+- **divoom_client.py**: Divoom device API integration with rate limiting
+- **validator_gadget.py**: Validator entity mapping and data enrichment
+- **l2_metrics.py**: Layer 2 metrics collection and processing
+- **slot_client.py**: Slot-specific beacon chain data handling
+
+### Frontend (React + TypeScript)
+- **Location**: `ui/` directory
+- **Build System**: Vite
+- **Target Display**: 64x64 pixel resolution
+- **Views**: Overview, Proposer, Execution, Layer2, Admin
+- **Components**: BaseLayout, SlotHistory (shared across views)
+
+### Display Pipeline
+1. React frontend renders current view at 64x64 resolution
+2. Playwright captures screenshot of rendered page
+3. Screenshot processed and sent to Divoom device
+4. View rotation system cycles between different displays
+
+## Key Architectural Patterns
+
+### Event-Driven Updates
+- Beacon client subscribes to head events and slot changes
+- Real-time data propagation through WebSocket connections
+- Caching mechanisms to reduce API load
+
+### View Management System
+- Configurable view rotation with intervals
+- Admin override capabilities
+- Per-view refresh rates and configurations
+
+### Data Flow
+```
+Beacon Node API → BeaconClient → FastAPI Backend → React Frontend → Playwright → Divoom Device
+```
+
+## Environment Configuration
+- All services configured via environment variables
+- Production/development mode switching
+- Configurable view rotation and display settings
+
+## Deployment Options
+- Standalone Python application
+- Docker containerized deployment
+- Development mode with hot reloading
+
+## File Organization
+- Root level: Core Python services and configuration
+- `ui/`: Complete React application
+- `ai_docs/`: AI-generated documentation
+- Scripts: `setup.sh`, `run.sh` for environment management
+
+## Technology Stack
+- **Backend**: Python 3.8-3.12, FastAPI, SQLAlchemy 1.4.x
+- **Frontend**: React, TypeScript, Vite
+- **Browser Automation**: Playwright
+- **Containerization**: Docker
+- **Package Management**: uv (Python), npm (Node.js)
+
+When making architectural changes:
+1. Consider impact on the display pipeline
+2. Maintain 64x64 pixel display constraints
+3. Respect view rotation system
+4. Ensure proper caching and rate limiting
+5. Follow existing event-driven patterns

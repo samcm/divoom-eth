@@ -1,4 +1,22 @@
-# Beacon-Divoom Project Guide
+# Beacon-Divoom
+
+Real-time Ethereum beacon chain monitoring system that displays validator and network metrics on a Divoom pixel display device.
+
+## Project Structure
+Claude MUST read the `.cursor/rules/project_architecture.mdc` file before making any structural changes to the project.
+
+## Code Standards  
+Claude MUST read the `.cursor/rules/code_standards.mdc` file before writing any code in this project.
+
+## Development Workflow
+Claude MUST read the `.cursor/rules/development_workflow.mdc` file before making changes to build, test, or deployment configurations.
+
+## Component Documentation
+Individual components have their own CLAUDE.md files with component-specific rules. Always check for and read component-level documentation when working on specific parts of the codebase.
+
+---
+
+# Detailed Project Guide
 
 This guide provides an overview of the `beacon-divoom` project structure, components, and guidance for future development.
 

@@ -1,0 +1,182 @@
+---
+description: Beacon-Divoom Code Standards and Conventions
+globs: ["*.py", "*.ts", "*.tsx", "*.js", "*.jsx"]
+alwaysApply: false
+---
+
+# Beacon-Divoom Code Standards
+
+## Python Code Standards
+
+### General Conventions
+- Follow PEP 8 style guidelines
+- Use snake_case for variables, functions, and module names
+- Use PascalCase for class names
+- Maximum line length: 88 characters (Black formatter standard)
+
+### Import Organization
+```python
+# Standard library imports
+import asyncio
+import logging
+from typing import Dict, List, Optional
+
+# Third-party imports
+import httpx
+from fastapi import FastAPI
+
+# Local imports
+from .beacon_client import BeaconClient
+```
+
+### Type Hints
+- Always use type hints for function parameters and return types
+- Use `typing` module for complex types
+- Example:
+```python
+async def fetch_validator_data(
+    validator_index: int, 
+    slot: Optional[int] = None
+) -> Dict[str, Any]:
+```
+
+### Error Handling
+- Use specific exception types rather than bare `except:`
+- Log errors with appropriate context
+- Handle rate limiting and network errors gracefully
+
+### Async/Await Patterns
+- Use `async def` for I/O bound operations
+- Properly handle concurrent operations with `asyncio.gather()`
+- Use context managers for resource management
+
+## TypeScript/React Code Standards
+
+### General Conventions
+- Use camelCase for variables and functions
+- Use PascalCase for components and types
+- Use kebab-case for file names
+- Prefer functional components with hooks
+
+### Component Structure
+```tsx
+interface ComponentProps {
+  data: MetricData;
+  className?: string;
+}
+
+export const MetricDisplay: React.FC<ComponentProps> = ({ 
+  data, 
+  className 
+}) => {
+  // Component logic
+  return <div className={className}>{/* JSX */}</div>;
+};
+```
+
+### Type Definitions
+- Define interfaces for all props and data structures
+- Use `types.ts` for shared type definitions
+- Prefer interfaces over type aliases for object shapes
+
+### Styling Conventions
+- Use Tailwind CSS classes for styling
+- Optimize for 64x64 pixel display constraints
+- Use pixel fonts (PIXY, PixelifySans, dogicapixel)
+- Ensure high contrast for readability on small displays
+
+## File Organization
+
+### Python Files
+- One class per file when possible
+- Group related functions in modules
+- Use `__init__.py` for package exports
+
+### React Files
+- One component per file
+- Use index files for component exports
+- Group related components in directories
+
+## Documentation Standards
+
+### Python Docstrings
+```python
+async def fetch_block_data(slot: int) -> Optional[Block]:
+    """Fetch block data for a specific slot.
+    
+    Args:
+        slot: The slot number to fetch data for
+        
+    Returns:
+        Block data if found, None otherwise
+        
+    Raises:
+        HTTPException: If the beacon node is unreachable
+    """
+```
+
+### TypeScript JSDoc
+```typescript
+/**
+ * Renders slot history visualization
+ * @param slots - Array of slot data to display
+ * @param maxSlots - Maximum number of slots to show
+ */
+```
+
+## Performance Guidelines
+
+### Python Performance
+- Use connection pooling for HTTP clients
+- Implement proper caching mechanisms
+- Use background tasks for non-blocking operations
+- Monitor memory usage for long-running processes
+
+### Frontend Performance
+- Minimize re-renders with proper dependency arrays
+- Use React.memo for expensive components
+- Optimize for 64x64 pixel rendering constraints
+- Keep bundle size minimal for fast loading
+
+## Security Practices
+
+### API Security
+- Validate all input parameters
+- Use proper CORS configuration
+- Implement rate limiting
+- Never log sensitive data (private keys, API keys)
+
+### Environment Variables
+- Use environment variables for configuration
+- Provide sensible defaults
+- Document all required environment variables
+
+## Testing Standards
+
+### Python Testing
+- Use pytest for testing framework
+- Test async functions properly
+- Mock external API calls
+- Aim for >80% code coverage
+
+### Frontend Testing
+- Test component rendering
+- Test user interactions
+- Mock API responses
+- Ensure accessibility compliance
+
+## Naming Conventions
+
+### Variables and Functions
+- Use descriptive names that explain purpose
+- Avoid abbreviations unless commonly understood
+- Use boolean prefixes: `is_`, `has_`, `can_`, `should_`
+
+### Constants
+- Use UPPER_SNAKE_CASE for constants
+- Group related constants in classes or modules
+
+### File Names
+- Python: `snake_case.py`
+- React: `PascalCase.tsx` for components, `camelCase.ts` for utilities
+- Use descriptive names that indicate file purpose

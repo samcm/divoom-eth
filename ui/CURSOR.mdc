@@ -1,0 +1,31 @@
+---
+description: UI - React frontend for 64x64 pixel Divoom display rendering
+globs: 
+  - "*.tsx"
+  - "*.ts"
+  - "*.css"
+  - "src/**/*"
+  - "vite.config.ts"
+alwaysApply: false
+---
+
+# UI Component - Divoom Display Frontend
+
+React frontend optimized for 64x64 pixel Divoom display rendering.
+
+## Core Constraints
+- **Fixed 64x64 pixel display**: All views must render within exact pixel constraints
+- **Pixel-perfect fonts**: Use PIXY, PixelifySans, or dogicapixel fonts exclusively
+- **View rotation system**: Components must work with backend-controlled view switching
+
+## Key Patterns
+- **BaseLayout**: Use shared layout component for consistent structure across views
+- **SlotHistory**: Reuse slot visualization component across different views
+- **API Integration**: Fetch data from FastAPI backend at `/api/` endpoints
+- **No CSS optimization**: Vite config disables minification and CSS splitting for pixel-perfect rendering
+
+## Critical Requirements
+- Maintain high contrast for small display readability
+- Keep bundle size minimal for fast screenshot capture
+- Use polling patterns (10s intervals) for real-time data updates
+- Test all views at exact 64x64 resolution

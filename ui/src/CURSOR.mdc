@@ -1,0 +1,24 @@
+---
+description: UI Source - React components for 64x64 pixel Ethereum beacon chain visualization
+globs: 
+  - "**/*.tsx"
+  - "**/*.ts"
+  - "**/*.css"
+alwaysApply: false
+---
+
+# UI Source Components
+
+React source components for 64x64 pixel Divoom display beacon chain visualization.
+
+## Key Patterns
+- All views extend routing system with API polling for current view state
+- Components use shared BaseLayout and SlotHistory patterns
+- Type interfaces centralized in types.ts for consistent API contracts
+- View rotation system requires components to be self-contained and stateless
+
+## Critical Constraints  
+- Components must render correctly at 64x64 pixels
+- Use only pixel fonts from fonts/ directory (PIXY, PixelifySans, dogicapixel)
+- Implement high contrast for small display readability
+- Keep bundle minimal for fast Playwright screenshot capture
